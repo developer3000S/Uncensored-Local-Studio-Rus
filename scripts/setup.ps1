@@ -389,7 +389,9 @@ if (-not (Test-Path $npmCmd)) {
 }
 
 Push-Location $frontendDir
+$oldPath = $env:PATH
 try {
+    $env:PATH = "$nodeDir;$env:PATH"
     & $npmCmd install --prefer-offline 2>&1
     if ($LASTEXITCODE -ne 0) {
         Print-Fail "npm install failed."
@@ -410,6 +412,7 @@ try {
     Write-Host ""
     Print-OK "Frontend built!"
 } finally {
+    $env:PATH = $oldPath
     Pop-Location
 }
 
