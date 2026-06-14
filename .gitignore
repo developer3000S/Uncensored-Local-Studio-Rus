@@ -5,6 +5,11 @@ app/models/*.ckpt
 app/models
 app/openvino-models/
 app/outputs/
+app/video-models/
+app/video-inputs/
+app/video-outputs/
+__pycache__/
+*.pyc
 
 # Ignore generated frontend build output
 app/dist/

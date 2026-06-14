@@ -38,6 +38,12 @@ fi
 if [[ -d "$APP_DIR/models" ]]; then
   echo "   >> Preserving downloaded models in app/models."
 fi
+if [[ -d "$APP_DIR/video-models" ]]; then
+  echo "   >> Preserving downloaded video models in app/video-models."
+fi
+if [[ -d "$APP_DIR/video-outputs" ]]; then
+  echo "   >> Preserving generated videos in app/video-outputs."
+fi
 
 # Delete node_modules in frontend
 if [[ -L "$APP_DIR/frontend/node_modules" || -d "$APP_DIR/frontend/node_modules" ]]; then

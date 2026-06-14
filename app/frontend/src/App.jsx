@@ -4,6 +4,9 @@ import TopStatusBar from "./components/TopStatusBar";
 import Generator from "./components/Generator";
 import ModelManager from "./components/ModelManager";
 import ImageConstraints from "./components/ImageConstraints";
+import VideoGenerator from "./components/VideoGenerator";
+import VideoModels from "./components/VideoModels";
+import VideoSettings from "./components/VideoSettings";
 import { cleanupCandidates, formatBytes, getCleanupCandidates, getDiagnostics, getHardwareSpecs, getHealth, getTelemetry, getBackendOptions, getBackendStatus, listGeneratedOutputs, stopServer } from "./services/api";
 import "./App.css";
 
@@ -72,6 +75,20 @@ function App() {
   // Generation status
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationProgress, setGenerationProgress] = useState(0);
+  const [videoModels, setVideoModels] = useState([]);
+  const [videoCapabilities, setVideoCapabilities] = useState(null);
+  const [videoSettings, setVideoSettings] = useState({
+    modelId: "animatediff-sd15",
+    mode: "text-to-video",
+    width: 512,
+    height: 512,
+    frames: 16,
+    fps: 8,
+    steps: 20,
+    guidance: 7.5,
+    seed: -1,
+    baseModel: "",
+  });
 
   // System Specifications & Telemetry
   const [specs, setSpecs] = useState({
@@ -371,6 +388,7 @@ function App() {
   ];
   const cleanupBytes = cleanupItems.reduce((sum, item) => sum + Number(item.sizeBytes || 0), 0);
   const showReadinessPanel = Boolean(health && (readinessIssues.length > 0 || cleanupItems.length > 0));
+  const isVideoWorkspace = activeTab.startsWith("video-");
 
   return (
     <div className="app-container">
@@ -390,7 +408,7 @@ function App() {
           setTheme={setTheme}
         />
 
-        {showReadinessPanel && (
+        {showReadinessPanel && !isVideoWorkspace && (
           <div className={`m3-card readiness-card ${health?.stale || readinessIssues.length > 0 ? "readiness-card-warning" : ""}`}>
             <div className="readiness-header">
               <div>
@@ -488,6 +506,41 @@ function App() {
             setActiveModel={setActiveModel}
             showAlert={showAlert}
             showConfirm={showConfirm}
+          />
+        </div>
+
+        <div style={{ display: activeTab === "video-generator" ? "flex" : "none", flex: 1, flexDirection: "column", overflow: "hidden" }}>
+          <VideoGenerator
+            settings={videoSettings}
+            setSettings={setVideoSettings}
+            models={videoModels}
+            setModels={setVideoModels}
+            capabilities={videoCapabilities}
+            setCapabilities={setVideoCapabilities}
+            setActiveTab={setActiveTab}
+            setServerRunning={setServerRunning}
+            setActiveModel={setActiveModel}
+            showAlert={showAlert}
+            showConfirm={showConfirm}
+          />
+        </div>
+
+        <div style={{ display: activeTab === "video-models" ? "flex" : "none", flex: 1, flexDirection: "column", overflow: "hidden" }}>
+          <VideoModels
+            models={videoModels}
+            setModels={setVideoModels}
+            capabilities={videoCapabilities}
+            setCapabilities={setVideoCapabilities}
+            showAlert={showAlert}
+            showConfirm={showConfirm}
+          />
+        </div>
+
+        <div style={{ display: activeTab === "video-settings" ? "flex" : "none", flex: 1, flexDirection: "column", overflow: "hidden" }}>
+          <VideoSettings
+            settings={videoSettings}
+            setSettings={setVideoSettings}
+            models={videoModels}
           />
         </div>
       </div>

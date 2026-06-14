@@ -10,6 +10,7 @@ const net      = require("net");
 const os       = require("os");
 const path     = require("path");
 const { spawn, spawnSync, execSync, exec } = require("child_process");
+const { VideoManager } = require("./video_manager.cjs");
 
 function readPort(value, fallback) {
   const port = parseInt(value, 10);
@@ -20,7 +21,7 @@ const PORT_FRONTEND = readPort(process.env.PORT || process.env.FRONTEND_PORT, 14
 const PREFERRED_BACKEND_PORT = readPort(process.env.BACKEND_PORT || process.env.SD_BACKEND_PORT, 8080);
 let PORT_BACKEND = PREFERRED_BACKEND_PORT;
 const MAX_JSON_BODY_BYTES = 64 * 1024 * 1024;
-const SERVER_BUILD = "polish-setup-v1";
+const SERVER_BUILD = "local-video-v2";
 const ROOT    = path.join(__dirname, "..");
 const DIST    = path.join(ROOT, "app", "dist");
 const osPlatform = process.platform;
@@ -76,6 +77,14 @@ const OUTPUTS = path.join(ROOT, "app", "outputs");
 if (!fs.existsSync(OUTPUTS)) {
   fs.mkdirSync(OUTPUTS, { recursive: true });
 }
+const videoManager = new VideoManager({
+  root: ROOT,
+  imageModelsDir: MODELS,
+  stopImageBackends: async () => {
+    await killBackend();
+    await killOpenVinoWorker();
+  },
+});
 
 const OPENVINO_NPU_MODELS = [
   {
@@ -1368,6 +1377,7 @@ function killBackend() {
 }
 
 async function startBackend(settings = {}) {
+  await videoManager.unloadForImageBackend();
   if (settings.backendType === "openvino-npu") {
     await startOpenVinoWorker(settings);
     return;
@@ -2340,11 +2350,47 @@ function json(res, code, obj) {
   res.end(body);
 }
 
+function streamFileWithRange(req, res, filePath, contentType) {
+  const stat = fs.statSync(filePath);
+  const range = req.headers.range;
+  const commonHeaders = {
+    "Content-Type": contentType,
+    "Accept-Ranges": "bytes",
+    "Access-Control-Allow-Origin": "*",
+  };
+  if (!range) {
+    res.writeHead(200, { ...commonHeaders, "Content-Length": stat.size });
+    fs.createReadStream(filePath).pipe(res);
+    return;
+  }
+
+  const match = String(range).match(/^bytes=(\d*)-(\d*)$/);
+  if (!match) {
+    res.writeHead(416, { "Content-Range": `bytes */${stat.size}` });
+    res.end();
+    return;
+  }
+  const start = match[1] ? Number(match[1]) : 0;
+  const end = match[2] ? Number(match[2]) : stat.size - 1;
+  if (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || end < start || start >= stat.size) {
+    res.writeHead(416, { "Content-Range": `bytes */${stat.size}` });
+    res.end();
+    return;
+  }
+  const safeEnd = Math.min(end, stat.size - 1);
+  res.writeHead(206, {
+    ...commonHeaders,
+    "Content-Range": `bytes ${start}-${safeEnd}/${stat.size}`,
+    "Content-Length": safeEnd - start + 1,
+  });
+  fs.createReadStream(filePath, { start, end: safeEnd }).pipe(res);
+}
+
 // ── HTTP Server ───────────────────────────────────────────────────────────────
 const server = http.createServer(async (req, res) => {
   // CORS preflight
   if (req.method === "OPTIONS") {
-    res.writeHead(204, { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "Content-Type", "Access-Control-Allow-Methods": "GET,POST" });
+    res.writeHead(204, { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "Content-Type", "Access-Control-Allow-Methods": "GET,POST,DELETE" });
     res.end(); return;
   }
 
@@ -2362,6 +2408,7 @@ const server = http.createServer(async (req, res) => {
       cleanupCandidates: getCleanupCandidates(),
       download: downloadState,
       generation: generationState,
+      video: videoManager.getDiagnostics(),
       hardware: getHardwareSpecs(),
       telemetry: getTelemetry(),
     });
@@ -2413,6 +2460,102 @@ const server = http.createServer(async (req, res) => {
   // GET /api/telemetry
   if (req.url === "/api/telemetry" && req.method === "GET") {
     return json(res, 200, getTelemetry());
+  }
+
+  // ── Local video generation API ────────────────────────────────────────────
+  if (req.url === "/api/video/capabilities" && req.method === "GET") {
+    return json(res, 200, videoManager.getCapabilities());
+  }
+
+  if (req.url === "/api/video/runtime/install" && req.method === "POST") {
+    try {
+      return json(res, 202, { ok: true, runtime: videoManager.startRuntimeInstall() });
+    } catch (err) {
+      return json(res, 400, { ok: false, error: err.message || String(err) });
+    }
+  }
+
+  if (req.url === "/api/video/models" && req.method === "GET") {
+    return json(res, 200, {
+      models: videoManager.listModels(),
+      download: videoManager.downloadState,
+      baseModels: videoManager.listBaseModels(),
+    });
+  }
+
+  if (req.url === "/api/video/models/download" && req.method === "POST") {
+    const body = await readJsonBody(req, res);
+    if (!body) return;
+    try {
+      return json(res, 202, { ok: true, download: videoManager.startModelDownload(String(body.modelId || "")) });
+    } catch (err) {
+      return json(res, 400, { ok: false, error: err.message || String(err) });
+    }
+  }
+
+  if (req.url === "/api/video/models/download/cancel" && req.method === "POST") {
+    return json(res, 200, { ok: true, cancelled: videoManager.cancelDownload() });
+  }
+
+  if (req.url.startsWith("/api/video/models/") && req.method === "DELETE") {
+    const modelId = decodeURIComponent(req.url.slice("/api/video/models/".length).split("?")[0]);
+    try {
+      return json(res, 200, { ok: true, deleted: videoManager.deleteModel(modelId) });
+    } catch (err) {
+      return json(res, 400, { ok: false, error: err.message || String(err) });
+    }
+  }
+
+  if (req.url === "/api/video/jobs" && req.method === "POST") {
+    const body = await readJsonBody(req, res);
+    if (!body) return;
+    try {
+      const job = videoManager.startJob(body);
+      return json(res, 202, { ok: true, job });
+    } catch (err) {
+      return json(res, err.statusCode || 400, {
+        ok: false,
+        error: err.message || String(err),
+        job: err.activeJob || undefined,
+      });
+    }
+  }
+
+  const videoJobMatch = req.url.match(/^\/api\/video\/jobs\/([^/?]+)(?:\/(cancel))?(?:\?.*)?$/);
+  if (videoJobMatch && req.method === "GET" && !videoJobMatch[2]) {
+    const job = videoManager.getJob(decodeURIComponent(videoJobMatch[1]));
+    return job ? json(res, 200, { ok: true, job }) : json(res, 404, { ok: false, error: "Video job not found." });
+  }
+
+  if (videoJobMatch && req.method === "POST" && videoJobMatch[2] === "cancel") {
+    const cancelled = videoManager.cancelJob(decodeURIComponent(videoJobMatch[1]));
+    return json(res, cancelled ? 200 : 409, {
+      ok: cancelled,
+      cancelled,
+      error: cancelled ? undefined : "Video job is not active or was not found.",
+    });
+  }
+
+  if (req.url === "/api/video/outputs" && req.method === "GET") {
+    return json(res, 200, { outputs: videoManager.listOutputs() });
+  }
+
+  if (req.url.startsWith("/api/video/output-file") && req.method === "GET") {
+    const parsed = new URL(req.url, `http://${req.headers.host || "localhost"}`);
+    const filePath = videoManager.getOutputPath(parsed.searchParams.get("filename"));
+    if (!filePath) return json(res, 404, { ok: false, error: "Video output not found." });
+    streamFileWithRange(req, res, filePath, "video/mp4");
+    return;
+  }
+
+  if (req.url === "/api/video/outputs/delete" && req.method === "POST") {
+    const body = await readJsonBody(req, res);
+    if (!body) return;
+    try {
+      return json(res, 200, { ok: true, deleted: videoManager.deleteOutputs(body.outputs || []) });
+    } catch (err) {
+      return json(res, 500, { ok: false, error: err.message || String(err) });
+    }
   }
 
   // GET /api/models — list available model files
@@ -2664,5 +2807,5 @@ server.listen(PORT_FRONTEND, "0.0.0.0", () => {
 });
 
 // Graceful shutdown
-process.on("SIGINT",  async () => { await killBackend(); process.exit(0); });
-process.on("SIGTERM", async () => { await killBackend(); process.exit(0); });
+process.on("SIGINT",  async () => { videoManager.shutdown(); await killBackend(); await killOpenVinoWorker(); process.exit(0); });
+process.on("SIGTERM", async () => { videoManager.shutdown(); await killBackend(); await killOpenVinoWorker(); process.exit(0); });

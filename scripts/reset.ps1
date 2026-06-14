@@ -37,6 +37,14 @@ $modelsDir = Join-Path $appDir "models"
 if (Test-Path $modelsDir) {
     Write-Host "   >> Preserving downloaded models in app/models." -ForegroundColor Cyan
 }
+$videoModelsDir = Join-Path $appDir "video-models"
+if (Test-Path $videoModelsDir) {
+    Write-Host "   >> Preserving downloaded video models in app/video-models." -ForegroundColor Cyan
+}
+$videoOutputsDir = Join-Path $appDir "video-outputs"
+if (Test-Path $videoOutputsDir) {
+    Write-Host "   >> Preserving generated videos in app/video-outputs." -ForegroundColor Cyan
+}
 
 # Delete node_modules in frontend
 $nodeModulesDir = Join-Path $appDir "frontend\node_modules"

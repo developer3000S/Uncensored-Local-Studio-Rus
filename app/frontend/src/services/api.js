@@ -9,7 +9,7 @@ export const isTauri = () => {
 // Cached hardware specs
 let cachedSpecs = null;
 let cachedBackendPort = null;
-export const EXPECTED_SERVER_BUILD = "polish-setup-v1";
+export const EXPECTED_SERVER_BUILD = "local-video-v2";
 
 const isLocalServerMode = () => {
   return typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
@@ -71,7 +71,10 @@ async function readJsonResponse(res, fallbackMessage = "The local server returne
     if (data.error === "Unknown API endpoint") {
       throw new Error("Restart the image generator so the local server loads the latest API.");
     }
-    throw new Error(data.error || `Request failed (HTTP ${res.status})`);
+    const error = new Error(data.error || `Request failed (HTTP ${res.status})`);
+    error.status = res.status;
+    error.data = data;
+    throw error;
   }
   return data;
 }
@@ -770,6 +773,75 @@ export async function getGenerationProgress() {
     console.error("Failed to get generation progress:", e);
     return { active: false, error: e.message };
   }
+}
+
+// ── Local video generation ──────────────────────────────────────────────────
+export async function getVideoCapabilities() {
+  const res = await fetch("/api/video/capabilities");
+  return await readJsonResponse(res, "The local server returned invalid video capability data.");
+}
+
+export async function installVideoRuntime() {
+  const res = await fetch("/api/video/runtime/install", { method: "POST" });
+  return await readJsonResponse(res, "The local server returned an invalid runtime installation response.");
+}
+
+export async function listVideoModels() {
+  const res = await fetch("/api/video/models");
+  return await readJsonResponse(res, "The local server returned invalid video model data.");
+}
+
+export async function downloadVideoModel(modelId) {
+  const res = await fetch("/api/video/models/download", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ modelId }),
+  });
+  return await readJsonResponse(res, "The local server returned an invalid video model download response.");
+}
+
+export async function cancelVideoModelDownload() {
+  const res = await fetch("/api/video/models/download/cancel", { method: "POST" });
+  return await readJsonResponse(res, "The local server returned an invalid cancellation response.");
+}
+
+export async function deleteVideoModel(modelId) {
+  const res = await fetch(`/api/video/models/${encodeURIComponent(modelId)}`, { method: "DELETE" });
+  return await readJsonResponse(res, "The local server returned an invalid video model deletion response.");
+}
+
+export async function startVideoJob(payload) {
+  const res = await fetch("/api/video/jobs", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return await readJsonResponse(res, "The local server returned an invalid video job response.");
+}
+
+export async function getVideoJob(jobId) {
+  const res = await fetch(`/api/video/jobs/${encodeURIComponent(jobId)}`);
+  return await readJsonResponse(res, "The local server returned invalid video job data.");
+}
+
+export async function cancelVideoJob(jobId) {
+  const res = await fetch(`/api/video/jobs/${encodeURIComponent(jobId)}/cancel`, { method: "POST" });
+  return await readJsonResponse(res, "The local server returned an invalid video cancellation response.");
+}
+
+export async function listVideoOutputs() {
+  const res = await fetch("/api/video/outputs");
+  const data = await readJsonResponse(res, "The local server returned invalid video output data.");
+  return data.outputs || [];
+}
+
+export async function deleteVideoOutputs(outputs) {
+  const res = await fetch("/api/video/outputs/delete", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ outputs }),
+  });
+  return await readJsonResponse(res, "The local server returned an invalid video output deletion response.");
 }
 
 

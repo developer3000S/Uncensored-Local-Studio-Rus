@@ -1,5 +1,5 @@
 import React, { memo } from "react";
-import { Image, FolderDown, Sliders, Shield, Terminal } from "lucide-react";
+import { Image, FolderDown, Sliders, Shield, Terminal, Film, Boxes, Gauge } from "lucide-react";
 
 function Sidebar({ activeTab, setActiveTab, specs }) {
   return (
@@ -35,6 +35,32 @@ function Sidebar({ activeTab, setActiveTab, specs }) {
           >
             <Sliders size={20} />
             <span>Image Constraints</span>
+          </div>
+
+          <div className="nav-divider"><span>VIDEO</span></div>
+
+          <div
+            className={`nav-item ${activeTab === "video-generator" ? "active" : ""}`}
+            onClick={() => setActiveTab("video-generator")}
+          >
+            <Film size={20} />
+            <span>Video Generator</span>
+          </div>
+
+          <div
+            className={`nav-item ${activeTab === "video-models" ? "active" : ""}`}
+            onClick={() => setActiveTab("video-models")}
+          >
+            <Boxes size={20} />
+            <span>Video Models</span>
+          </div>
+
+          <div
+            className={`nav-item ${activeTab === "video-settings" ? "active" : ""}`}
+            onClick={() => setActiveTab("video-settings")}
+          >
+            <Gauge size={20} />
+            <span>Video Settings</span>
           </div>
         </div>
       </div>

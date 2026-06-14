@@ -1,6 +1,6 @@
 # 🖼️ Local AI Image Generator
 
-### An easy, zero-setup Stable Diffusion GUI for Windows, Linux, and macOS. Run GGUF & Safetensors models offline without Python configuration.
+### An easy local image and video generation GUI. Run image models across Windows, Linux, and macOS, plus offline CUDA video generation on Windows and Linux.
 
 
 
@@ -23,6 +23,27 @@
 
 ## 📖 Overview
 **Local AI Image Generator** is a zero-configuration, portable desktop environment for running Stable Diffusion (Safetensors/GGUF/CKPT) offline on Windows, Linux, and macOS. Running `windows.bat` (Windows), `./linux.sh` (Linux), or `./mac.sh` (macOS) automatically handles dependency setup, GPU backend matching, and launches a high-performance local web workspace.
+
+The app also includes an optional **Local Video Generator** for 64-bit Windows and Linux systems with an NVIDIA CUDA GPU. Its Python/PyTorch runtime is installed on demand into the project folder and does not modify the system Python installation. Once the runtime and selected model are downloaded, video generation is fully offline.
+
+## Local Video Generation
+
+1. Open **Video Models** in the sidebar.
+2. Select **Install Runtime**. This installs uv, managed Python 3.11, PyTorch CUDA 12.6, Diffusers, and MP4 encoding tools under `app/tools/video-runtime/`.
+3. Download a compatible model profile.
+4. Open **Video Generator**, select Text to Video or Image to Video, then generate.
+
+Image and video model processes are mutually exclusive. Starting video generation unloads the image backend; loading an image model unloads the video pipeline. This prevents both systems from competing for VRAM.
+
+| Video profile | Modes | Minimum VRAM | Download | Default output |
+| --- | --- | ---: | ---: | --- |
+| AnimateDiff SD 1.5 | Text to video | 8 GB | ~0.5 GB plus a local SD 1.5 checkpoint | 512×512, 16 frames, 8 FPS |
+| Stable Video Diffusion XT | Image to video | 8 GB | ~4.6 GB FP16 files | 1024×576, 25 frames, 6 FPS |
+| Wan 2.2 TI2V 5B | Text and image to video | 24 GB | ~32 GB | 1280×704, up to 5 seconds at 24 FPS |
+
+Video models are stored in `app/video-models/`, temporary source images in `app/video-inputs/`, and generated MP4 files plus JSON metadata in `app/video-outputs/`. The model manager hides incompatible profiles based on detected VRAM and RAM; there is intentionally no CPU fallback.
+
+Some Hugging Face models require accepting their license on the model page or providing an `HF_TOKEN` environment variable before downloading.
 
 ---
 
@@ -78,7 +99,10 @@ local-ai-image-generator/
 │   └── serve.cjs              # UI web server and backend lifecycle manager
 └── app/
     ├── frontend/              # UI source code (Vite + React)
-    ├── models/                # Place weights here (.safetensors, .gguf, .ckpt)
+    ├── models/                # Image weights (.safetensors, .gguf, .ckpt)
+    ├── video-models/          # Downloaded Diffusers video snapshots
+    ├── video-inputs/          # Local image-to-video source files
+    ├── video-outputs/         # Generated MP4 files and JSON metadata
     └── outputs/               # Saved images and parameters metadata
 ```
 
@@ -147,7 +171,7 @@ Typical generation times for an image with **20 steps** (e.g. 512x512 resolution
 ---
 
 ## 🛠️ Troubleshooting
-*   **Reset Environment:** If a build fails or you want to clear dependencies, run `scripts/reset.ps1` (Windows) or `scripts/reset.sh` (Linux/macOS). (This preserves your models and generated images).
+*   **Reset Environment:** If a build fails or you want to clear dependencies, run `scripts/reset.ps1` (Windows) or `scripts/reset.sh` (Linux/macOS). This removes portable runtimes and build artifacts while preserving image/video models and generated outputs.
 *   **Port Conflicts:** The frontend uses `1420` by default. The backend tries `8080` first, then automatically falls back to a free port if `8080` is already busy.
 *   **Linux backends fail to start with `GLIBC_2.38' not found`:** The prebuilt binaries require glibc 2.38+ (Ubuntu 24.04). Upgrade your distribution or build stable-diffusion.cpp from source (see below).
 *   **Linux ROCm not loading:** Make sure your AMD GPU and kernel are compatible with ROCm 7.13. The app will automatically fall back to Vulkan if ROCm cannot initialize.
