@@ -438,25 +438,19 @@ function TextChat({
   return (
     <div className="text-chat-layout" style={{ display: "flex", padding: "20px", height: "100%", width: "100%", boxSizing: "border-box", overflow: "hidden" }}>
       <section className="text-chat-main" style={{ flex: 1, minWidth: 0, height: "100%", display: "flex", flexDirection: "column" }}>
+        {/* ─── Header ─────────────────────────────────────────── */}
         <div className="text-chat-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "16px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-            {/* Toggle History Sidebar button */}
             <button
               onClick={() => setShowHistory(!showHistory)}
               className="m3-btn m3-btn-tonal"
               style={{
-                height: "38px",
-                width: "38px",
-                padding: 0,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                borderRadius: "var(--md-shape-corner-medium)",
-                cursor: "pointer",
+                height: "38px", width: "38px", padding: 0,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                borderRadius: "var(--md-shape-corner-medium)", cursor: "pointer",
                 background: showHistory ? "var(--md-sys-color-primary-container)" : "var(--md-sys-color-surface-variant)",
                 color: showHistory ? "var(--md-sys-color-on-primary-container)" : "var(--md-sys-color-on-surface)",
-                border: "1px solid var(--border-color)",
-                flexShrink: 0
+                border: "1px solid var(--border-color)", flexShrink: 0
               }}
               title="Toggle Chat History"
             >
@@ -468,16 +462,12 @@ function TextChat({
               onChange={(e) => handleModelChange(e.target.value)}
               disabled={isBusy}
               style={{
-                fontSize: "0.95rem",
-                fontWeight: "600",
+                fontSize: "0.95rem", fontWeight: "600",
                 border: "1px solid var(--border-color)",
                 borderRadius: "var(--md-shape-corner-medium)",
                 background: "var(--md-sys-color-surface-variant)",
                 color: "var(--md-sys-color-on-surface)",
-                padding: "8px 16px",
-                outline: "none",
-                cursor: "pointer",
-                minWidth: "220px"
+                padding: "8px 16px", outline: "none", cursor: "pointer", minWidth: "220px"
               }}
             >
               <option value="">No model loaded (Select GGUF)</option>
@@ -494,18 +484,12 @@ function TextChat({
                 onClick={() => handleModelChange(selectedModel)}
                 disabled={isBusy}
                 style={{
-                  height: "38px",
-                  padding: "0 16px",
-                  fontSize: "0.85rem",
+                  height: "38px", padding: "0 16px", fontSize: "0.85rem",
                   borderRadius: "var(--md-shape-corner-medium)",
                   background: "var(--md-sys-color-primary)",
                   color: "var(--md-sys-color-on-primary)",
-                  cursor: "pointer",
-                  border: "none",
-                  fontWeight: "600",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "6px"
+                  cursor: "pointer", border: "none", fontWeight: "600",
+                  display: "flex", alignItems: "center", gap: "6px"
                 }}
               >
                 Load Model
@@ -514,29 +498,20 @@ function TextChat({
           </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: "20px" }}>
-
-            {/* Small circular gauge for context */}
+            {/* Context gauge */}
             {(() => {
               const maxTokens = status.settings?.contextSize || 4096;
               const used = tokenUsage.total_tokens || 0;
               const percent = Math.min(100, Math.round((used / maxTokens) * 100));
-              
               return (
                 <div style={{ display: "flex", alignItems: "center", gap: "8px" }} title={`Context Used: ${used} / ${maxTokens} tokens`}>
                   <div style={{ position: "relative", width: "40px", height: "40px", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                     <svg width="40" height="40" viewBox="0 0 40 40">
                       <circle cx="20" cy="20" r="16" stroke="var(--border-color)" strokeWidth="3" fill="transparent" />
-                      <circle 
-                        cx="20" 
-                        cy="20" 
-                        r="16" 
-                        stroke="var(--md-sys-color-primary)" 
-                        strokeWidth="3" 
-                        fill="transparent" 
+                      <circle cx="20" cy="20" r="16" stroke="var(--md-sys-color-primary)" strokeWidth="3" fill="transparent"
                         strokeDasharray={2 * Math.PI * 16}
                         strokeDashoffset={2 * Math.PI * 16 * (1 - percent / 100)}
-                        strokeLinecap="round"
-                        transform="rotate(-90 20 20)"
+                        strokeLinecap="round" transform="rotate(-90 20 20)"
                         style={{ transition: "stroke-dashoffset 0.35s" }}
                       />
                     </svg>
@@ -545,29 +520,16 @@ function TextChat({
                     </div>
                   </div>
                   <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.2 }}>
-                    <span style={{ fontSize: "0.65rem", color: "var(--md-sys-color-outline)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                      Context Used
-                    </span>
-                    <span style={{ fontSize: "0.8rem", fontWeight: "600", color: "var(--md-sys-color-on-surface)" }}>
-                      {used} / {maxTokens}
-                    </span>
+                    <span style={{ fontSize: "0.65rem", color: "var(--md-sys-color-outline)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>Context</span>
+                    <span style={{ fontSize: "0.8rem", fontWeight: "600", color: "var(--md-sys-color-on-surface)" }}>{used} / {maxTokens}</span>
                   </div>
                 </div>
               );
             })()}
 
-            {/* Clear Conversation button */}
-            <button 
-              className="m3-btn m3-btn-outlined" 
-              style={{ 
-                height: "36px", 
-                padding: "0 12px", 
-                display: "flex", 
-                alignItems: "center", 
-                gap: "6px", 
-                fontSize: "0.82rem",
-                borderRadius: "var(--md-shape-corner-medium)"
-              }}
+            <button
+              className="m3-btn m3-btn-outlined"
+              style={{ height: "36px", padding: "0 12px", display: "flex", alignItems: "center", gap: "6px", fontSize: "0.82rem", borderRadius: "var(--md-shape-corner-medium)" }}
               onClick={handleClearChat}
               disabled={messages.length === 0}
             >
@@ -577,39 +539,25 @@ function TextChat({
           </div>
         </div>
 
+        {/* ─── Messages area ──────────────────────────────────── */}
         <div ref={chatMessagesRef} className="chat-messages">
           {loadingModel ? (
             <div className="chat-empty" style={{ maxWidth: "480px", margin: "auto", textAlign: "center", padding: "60px 20px" }}>
               <LoaderCircle className="progress-spinner" size={48} style={{ color: "var(--md-sys-color-primary)", marginBottom: "16px" }} />
               <h3 style={{ fontWeight: 600, fontSize: "1.25rem", marginBottom: "8px", color: "var(--md-sys-color-on-surface)" }}>Loading Text Model</h3>
-              <code style={{ 
-                display: "block", 
-                background: "var(--md-sys-color-surface-variant)", 
-                color: "var(--md-sys-color-on-surface-variant)",
-                padding: "8px 12px", 
-                borderRadius: "6px", 
-                fontSize: "0.85rem",
-                marginBottom: "20px",
-                wordBreak: "break-all",
-                fontFamily: "monospace"
+              <code style={{
+                display: "block", background: "var(--md-sys-color-surface-variant)",
+                color: "var(--md-sys-color-on-surface-variant)", padding: "8px 12px",
+                borderRadius: "6px", fontSize: "0.85rem", marginBottom: "20px",
+                wordBreak: "break-all", fontFamily: "monospace"
               }}>
                 {loadingModel}
               </code>
               <p style={{ fontSize: "0.9rem", color: "var(--md-sys-color-outline)", lineHeight: 1.5, marginBottom: "24px" }}>
                 Initializing llama.cpp server and loading the model weights into memory. This can take up to 30 seconds depending on model size and hardware speed.
               </p>
-              <button 
-                className="m3-btn m3-btn-error" 
-                onClick={handleCancelLlmLoad}
-                style={{ 
-                  display: "inline-flex", 
-                  alignItems: "center", 
-                  gap: "8px",
-                  height: "38px",
-                  padding: "0 16px",
-                  fontSize: "0.85rem",
-                  borderRadius: "var(--md-shape-corner-medium)"
-                }}
+              <button className="m3-btn m3-btn-error" onClick={handleCancelLlmLoad}
+                style={{ display: "inline-flex", alignItems: "center", gap: "8px", height: "38px", padding: "0 16px", fontSize: "0.85rem", borderRadius: "var(--md-shape-corner-medium)" }}
               >
                 <Square size={14} fill="currentColor" />
                 <span>Cancel Load</span>
@@ -619,53 +567,79 @@ function TextChat({
             <>
               {messages.length === 0 && (
                 <div className="chat-empty">
-                  <Bot size={42} />
-                  <h3>Local ChatGPT-style Interface</h3>
-                  <p>Choose a GGUF text model above to load it. Your conversation history stays completely private on this machine.</p>
-                </div>
-              )}
-              {messages.map((message, index) => (
-                <div key={`${message.role}-${index}`} className={`chat-message ${message.role} ${message.error ? "error" : ""}`}>
-                  <strong>{message.role === "user" ? "You" : "Local AI"}</strong>
-                  <div>
-                    {Array.isArray(message.content) ? (
-                      <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                        {message.content.map((item, idx) => {
-                          if (item.type === "text") {
-                            return <MarkdownRenderer key={idx} content={item.text} />;
-                          }
-                          if (item.type === "image_url") {
-                            return (
-                              <img 
-                                key={idx} 
-                                src={item.image_url.url} 
-                                alt="Attached image" 
-                                style={{ maxWidth: "240px", maxHeight: "180px", objectFit: "contain", borderRadius: "6px", marginTop: "4px" }} 
-                              />
-                            );
-                          }
-                          return null;
-                        })}
-                      </div>
-                    ) : (
-                      <MarkdownRenderer content={message.content} />
-                    )}
+                  <div className="chat-empty-icon">
+                    <Bot size={30} />
                   </div>
-                  {message.role === "assistant" && message.generationStats && !message.error && (
-                    <div className={`chat-generation-stats ${message.generationStats.status}`}>
-                      {message.generationStats.status === "starting" ? (
-                        <>Waiting for first token...</>
-                      ) : message.generationStats.status === "streaming" ? (
-                        <>{message.generationStats.tokensPerSecond.toFixed(1)} tokens/sec</>
-                      ) : (
-                        <>
-                          {message.generationStats.tokens} tokens
-                          <span>•</span>
-                          {formatGenerationTime(message.generationStats.seconds)}
-                        </>
-                      )}
+                  <h3>Local AI Chat</h3>
+                  <p>Your private, offline AI assistant. Choose a GGUF model above and start a conversation — everything stays on your machine.</p>
+                  {status.ready && (
+                    <div className="chat-suggestions">
+                      {[
+                        { icon: "✍️", text: "Write a professional email to reschedule a meeting" },
+                        { icon: "💡", text: "Explain how transformers work in simple terms" },
+                        { icon: "🐛", text: "Help me debug this Python code" },
+                        { icon: "📋", text: "Summarize the key points of a topic" },
+                      ].map((s, i) => (
+                        <button
+                          key={i}
+                          className="chat-suggestion-chip"
+                          onClick={() => { setInput(s.text); }}
+                        >
+                          <span style={{ fontSize: "1rem", flexShrink: 0 }}>{s.icon}</span>
+                          <span>{s.text}</span>
+                        </button>
+                      ))}
                     </div>
                   )}
+                </div>
+              )}
+
+              {messages.map((message, index) => (
+                <div
+                  key={`${message.role}-${index}`}
+                  className={`chat-message-row ${message.role === "user" ? "user" : "ai"}`}
+                >
+                  {/* Avatar */}
+                  <div className={`chat-avatar ${message.role === "user" ? "user" : "ai"}`}>
+                    {message.role === "user" ? "You" : "AI"}
+                  </div>
+
+                  {/* Bubble + stats */}
+                  <div className="chat-bubble-wrap">
+                    <span className="chat-sender-label">
+                      {message.role === "user" ? "You" : "Local AI"}
+                    </span>
+                    <div className={`chat-bubble ${message.error ? "error" : ""}`}>
+                      {Array.isArray(message.content) ? (
+                        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                          {message.content.map((item, idx) => {
+                            if (item.type === "text") return <MarkdownRenderer key={idx} content={item.text} />;
+                            if (item.type === "image_url") return (
+                              <img key={idx} src={item.image_url.url} alt="Attached image"
+                                style={{ maxWidth: "240px", maxHeight: "180px", objectFit: "contain", borderRadius: "8px", marginTop: "4px" }}
+                              />
+                            );
+                            return null;
+                          })}
+                        </div>
+                      ) : (
+                        <MarkdownRenderer content={message.content} />
+                      )}
+                    </div>
+
+                    {/* Generation stats pill */}
+                    {message.role === "assistant" && message.generationStats && !message.error && (
+                      <div className={`chat-generation-stats ${message.generationStats.status}`}>
+                        {message.generationStats.status === "starting" ? (
+                          <><LoaderCircle size={11} className="progress-spinner" /> Waiting for first token...</>
+                        ) : message.generationStats.status === "streaming" ? (
+                          <><span style={{ opacity: 0.7 }}>⚡</span> {message.generationStats.tokensPerSecond.toFixed(1)} tok/s</>
+                        ) : (
+                          <>{message.generationStats.tokens} tokens <span style={{ opacity: 0.5 }}>•</span> {formatGenerationTime(message.generationStats.seconds)}</>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
               ))}
             </>
@@ -673,50 +647,33 @@ function TextChat({
           <div ref={bottomRef} />
         </div>
 
-        <div className="chat-composer" style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+        {/* ─── Composer ───────────────────────────────────────── */}
+        <div className="chat-composer">
+          {/* Attachment previews */}
           {attachments.length > 0 && (
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", paddingBottom: "8px" }}>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", paddingBottom: "10px" }}>
               {attachments.map((att) => (
-                <div key={att.id} style={{ 
-                  position: "relative", 
-                  display: "flex", 
-                  alignItems: "center", 
-                  gap: "6px", 
-                  padding: "6px 28px 6px 8px", 
-                  background: "var(--md-sys-color-surface-variant)", 
-                  border: "1px solid var(--border-color)", 
-                  borderRadius: "6px", 
-                  fontSize: "0.8rem",
-                  maxWidth: "200px"
+                <div key={att.id} style={{
+                  position: "relative", display: "flex", alignItems: "center", gap: "6px",
+                  padding: "6px 28px 6px 8px",
+                  background: "var(--md-sys-color-surface-variant)",
+                  border: "1px solid var(--border-color)",
+                  borderRadius: "8px", fontSize: "0.8rem", maxWidth: "200px"
                 }}>
                   {att.type === "image" ? (
                     <img src={att.dataUrl} alt={att.name} style={{ width: "24px", height: "24px", objectFit: "cover", borderRadius: "3px" }} />
                   ) : (
                     <span style={{ fontWeight: 600 }}>📄</span>
                   )}
-                  <span style={{ 
-                    whiteSpace: "nowrap", 
-                    overflow: "hidden", 
-                    textOverflow: "ellipsis", 
-                    color: "var(--md-sys-color-on-surface-variant)" 
-                  }} title={att.name}>
+                  <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", color: "var(--md-sys-color-on-surface-variant)" }} title={att.name}>
                     {att.name}
                   </span>
-                  <button 
+                  <button
                     onClick={() => setAttachments(prev => prev.filter(item => item.id !== att.id))}
                     style={{
-                      position: "absolute",
-                      right: "4px",
-                      top: "50%",
-                      transform: "translateY(-50%)",
-                      background: "none",
-                      border: "none",
-                      color: "var(--md-sys-color-error)",
-                      cursor: "pointer",
-                      padding: "2px",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center"
+                      position: "absolute", right: "4px", top: "50%", transform: "translateY(-50%)",
+                      background: "none", border: "none", color: "var(--md-sys-color-error)",
+                      cursor: "pointer", padding: "2px", display: "flex", alignItems: "center", justifyContent: "center"
                     }}
                   >
                     <X size={14} />
@@ -726,18 +683,12 @@ function TextChat({
             </div>
           )}
 
-          <div style={{ display: "flex", gap: "10px", width: "100%" }}>
-            <input 
-              type="file" 
-              ref={fileInputRef} 
-              style={{ display: "none" }} 
-              multiple 
-              onChange={handleFileChange} 
-            />
-            <button 
-              className="m3-btn m3-btn-tonal" 
-              onClick={() => fileInputRef.current?.click()} 
-              style={{ padding: "0 12px", height: "48px", display: "flex", alignItems: "center", justifyContent: "center" }}
+          {/* Input row */}
+          <div className="chat-composer-inner">
+            <input type="file" ref={fileInputRef} style={{ display: "none" }} multiple onChange={handleFileChange} />
+            <button
+              className="chat-composer-attach-btn"
+              onClick={() => fileInputRef.current?.click()}
               disabled={!supportsVision || isBusy}
               title={supportsVision ? "Attach files or images" : "Image attachment requires a vision model with an mmproj file"}
             >
@@ -745,6 +696,7 @@ function TextChat({
             </button>
 
             <textarea
+              className="chat-composer-textarea"
               value={input}
               onChange={(event) => setInput(event.target.value)}
               onKeyDown={(event) => {
@@ -753,35 +705,32 @@ function TextChat({
                   sendMessage();
                 }
               }}
-              placeholder={status.ready ? "Message your local model..." : "Select and load a GGUF model above to begin"}
+              placeholder={status.ready ? "Message your local model... (Shift+Enter for new line)" : "Select and load a GGUF model above to begin"}
               disabled={!status.ready || isBusy}
-              style={{ flex: 1 }}
+              rows={1}
             />
+
             {isBusy && status.ready ? (
-              <button 
-                className="m3-btn m3-btn-error" 
-                onClick={handleStopGeneration} 
-                style={{ height: "48px", display: "flex", alignItems: "center", gap: "6px" }}
-              >
-                <Square size={14} fill="currentColor" /> Stop
+              <button className="chat-composer-stop-btn" onClick={handleStopGeneration} title="Stop generation">
+                <Square size={15} fill="currentColor" />
               </button>
             ) : (
-              <button 
-                className="m3-btn m3-btn-filled" 
-                onClick={sendMessage} 
+              <button
+                className="chat-composer-send-btn"
+                onClick={sendMessage}
                 disabled={(!input.trim() && attachments.length === 0) || !status.ready}
-                style={{ height: "48px" }}
+                title="Send message"
               >
-                <Send size={17} /> Send
+                <Send size={17} />
               </button>
             )}
           </div>
+          <div className="chat-composer-hint">Enter to send &nbsp;·&nbsp; Shift+Enter for new line</div>
         </div>
       </section>
     </div>
   );
-}
-
+}
 function parseInlineMarkdown(text) {
   const regex = /(\*\*.*?\*\*|`.*?`|\*.*?\*|\[.*?\]\(.*?\))/g;
   const parts = text.split(regex);
