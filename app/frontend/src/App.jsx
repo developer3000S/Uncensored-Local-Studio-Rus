@@ -169,6 +169,7 @@ function App() {
         return {
           language: parsed.language || "auto",
           threads: Math.max(1, Math.min(32, Number(parsed.threads) || Math.max(1, Math.min(8, navigator.hardwareConcurrency || 4)))),
+          backendPreference: ["auto", "vulkan", "metal", "cpu"].includes(parsed.backendPreference) ? parsed.backendPreference : "auto",
           translate: parsed.translate === true,
         };
       } catch (_) {}
@@ -176,6 +177,7 @@ function App() {
     return {
       language: "auto",
       threads: Math.max(1, Math.min(8, navigator.hardwareConcurrency || 4)),
+      backendPreference: "auto",
       translate: false,
     };
   });

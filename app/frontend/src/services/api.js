@@ -593,6 +593,7 @@ export async function startSpeech(model, options = {}) {
       model,
       language: options.language || "auto",
       threads: options.threads,
+      backendPreference: options.backendPreference || "auto",
     }),
   });
   return await readJsonResponse(res, "The local server returned an invalid speech start response.");
@@ -609,6 +610,7 @@ export async function transcribeSpeech(fileOrBlob, options = {}) {
   if (options.language) params.set("language", options.language);
   if (options.filename) params.set("filename", options.filename);
   if (options.threads) params.set("threads", String(options.threads));
+  if (options.backendPreference) params.set("backendPreference", options.backendPreference);
   if (options.translate) params.set("translate", "true");
 
   const res = await fetch(`/api/speech/transcribe?${params.toString()}`, {

@@ -2,10 +2,12 @@ param([string]$Release = "v1.9.1")
 
 $ErrorActionPreference = "Stop"
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$rootDir = Split-Path -Parent $scriptDir
+$rootDir = Split-Path -Parent (Split-Path -Parent $scriptDir)
 $appDir = Join-Path $rootDir "app"
 $toolsDir = Join-Path $appDir "tools"
-$speechRoot = Join-Path $appDir "speech-backend\win"
+$speechWinRoot = Join-Path $appDir "speech-backend\win"
+$speechRoot = Join-Path $speechWinRoot "cpu"
+$speechVulkanRoot = Join-Path $speechWinRoot "vulkan"
 
 function Enable-Tls12 {
     try {
@@ -41,11 +43,29 @@ function Find-FirstFile {
     return $null
 }
 
-New-Item -ItemType Directory -Force -Path $toolsDir, $speechRoot | Out-Null
+New-Item -ItemType Directory -Force -Path $toolsDir, $speechRoot, $speechVulkanRoot | Out-Null
 
 $cliPath = Join-Path $speechRoot "whisper-cli.exe"
 if (Test-Path $cliPath) {
     Write-Host "   OK  whisper.cpp speech backend already ready."
+    if (-not (Test-Path (Join-Path $speechVulkanRoot "whisper-cli.exe"))) {
+        Write-Host "   ..  Optional Vulkan GPU backend slot: app/speech-backend/win/vulkan"
+    }
+    exit 0
+}
+
+$legacyCli = Join-Path $speechWinRoot "whisper-cli.exe"
+$legacyServer = Join-Path $speechWinRoot "whisper-server.exe"
+if (Test-Path $legacyCli) {
+    Copy-Item $legacyCli $cliPath -Force
+    if (Test-Path $legacyServer) {
+        Copy-Item $legacyServer (Join-Path $speechRoot "whisper-server.exe") -Force
+    }
+    Get-ChildItem $speechWinRoot -File -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -notin @("whisper-cli.exe", "whisper-server.exe") } |
+        ForEach-Object { Copy-Item $_.FullName (Join-Path $speechRoot $_.Name) -Force }
+    Write-Host "   OK  migrated existing whisper.cpp CPU backend to app/speech-backend/win/cpu."
+    Write-Host "   ..  For GPU transcription, place a Vulkan-enabled whisper.cpp build in app/speech-backend/win/vulkan."
     exit 0
 }
 
@@ -81,3 +101,5 @@ if (-not (Test-Path $cliPath)) {
     throw "whisper-cli.exe was not installed."
 }
 Write-Host "   OK  whisper.cpp speech backend installed."
+Write-Host "   ..  CPU backend path: app/speech-backend/win/cpu"
+Write-Host "   ..  Optional Vulkan GPU backend path: app/speech-backend/win/vulkan"

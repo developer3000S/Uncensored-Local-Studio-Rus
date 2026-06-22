@@ -964,7 +964,7 @@ function Settings({
         <SectionHeader 
           icon={Volume2} 
           title="Speech Transcription" 
-          count={3}
+          count={4}
           color="#10b981"
           isExpanded={expandedSections.speech}
           onToggle={() => toggleSection("speech")}
@@ -982,6 +982,23 @@ function Settings({
                     Transcription Settings
                   </div>
                   <div className="m3-field-group">
+                    <div className="m3-text-field">
+                      <label className="m3-text-field-label">Default Backend</label>
+                      <select
+                        className="m3-input"
+                        value={speechSettings.backendPreference || "auto"}
+                        onChange={(e) => updateSpeechSetting("backendPreference", e.target.value)}
+                      >
+                        <option value="auto">Auto - GPU if installed</option>
+                        <option value="vulkan">Vulkan GPU</option>
+                        <option value="metal">Metal GPU</option>
+                        <option value="cpu">CPU</option>
+                      </select>
+                      <span className="settings-option-desc" style={{ marginTop: "4px", display: "block" }}>
+                        Auto uses a GPU whisper.cpp backend when its binary exists, then falls back to CPU.
+                      </span>
+                    </div>
+
                     <div className="m3-text-field">
                       <label className="m3-text-field-label">Default Language</label>
                       <select 

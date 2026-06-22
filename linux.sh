@@ -23,8 +23,8 @@ CPU_BACKEND_PATH="$APP_DIR/backend/linux/cpu/sd-cpu"
 PLATFORM_LABEL="Linux"
 
 DIST_INDEX="$APP_DIR/dist/index.html"
-SETUP_SCRIPT="$SCRIPT_DIR/scripts/setup.sh"
-SERVE_SCRIPT="$SCRIPT_DIR/scripts/serve.cjs"
+SETUP_SCRIPT="$SCRIPT_DIR/scripts/setup/setup.sh"
+SERVE_SCRIPT="$SCRIPT_DIR/scripts/server/serve.cjs"
 
 FRONTEND_PORT="${FRONTEND_PORT:-1420}"
 LLM_PORT="${LLM_PORT:-10086}"
@@ -51,7 +51,7 @@ for arg in "$@"; do
 done
 
 if [[ $SETUP_OPENVINO -eq 1 ]]; then
-  bash "$SCRIPT_DIR/scripts/setup-openvino-npu.sh"
+  bash "$SCRIPT_DIR/scripts/setup/setup-openvino-npu.sh"
 fi
 
 # ── Setup node_modules to avoid OS conflicts ────────────────────────────────
@@ -133,7 +133,7 @@ LLM_ROCM_PATH="$APP_DIR/llm-backend/linux/rocm/llama-server"
 LLM_SYCL_PATH="$APP_DIR/llm-backend/linux/sycl/llama-server"
 LLM_VULKAN_PATH="$APP_DIR/llm-backend/linux/vulkan/llama-server"
 LLM_CPU_PATH="$APP_DIR/llm-backend/linux/cpu/llama-server"
-SPEECH_BACKEND_PATH="$APP_DIR/speech-backend/linux/whisper-cli"
+SPEECH_BACKEND_PATH="$APP_DIR/speech-backend/linux/cpu/whisper-cli"
 TTS_RUNTIME_PATH="$APP_DIR/tts-runtime/node_modules/kokoro-js"
 if [[ ! -x "$CPU_BACKEND_PATH" || ! -x "$CPU_SERVER_PATH" ]] && [[ ! -x "$BACKEND_PATH" || ! -x "$VULKAN_SERVER_PATH" ]]; then
   SETUP_REASON="Linux backend binaries are missing or not executable."

@@ -27,8 +27,8 @@ TTS_RUNTIME_PATH="$APP_DIR/tts-runtime/node_modules/kokoro-js"
 PLATFORM_LABEL="macOS"
 
 DIST_INDEX="$APP_DIR/dist/index.html"
-SETUP_SCRIPT="$SCRIPT_DIR/scripts/setup.sh"
-SERVE_SCRIPT="$SCRIPT_DIR/scripts/serve.cjs"
+SETUP_SCRIPT="$SCRIPT_DIR/scripts/setup/setup.sh"
+SERVE_SCRIPT="$SCRIPT_DIR/scripts/server/serve.cjs"
 
 FRONTEND_PORT="${FRONTEND_PORT:-1420}"
 LLM_PORT="${LLM_PORT:-10086}"

@@ -2,7 +2,7 @@ param([string]$Release = "b9668")
 
 $ErrorActionPreference = "Stop"
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$rootDir = Split-Path -Parent $scriptDir
+$rootDir = Split-Path -Parent (Split-Path -Parent $scriptDir)
 $appDir = Join-Path $rootDir "app"
 $toolsDir = Join-Path $appDir "tools"
 $llmRoot = Join-Path $appDir "llm-backend\win"

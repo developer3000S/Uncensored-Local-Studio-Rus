@@ -6,7 +6,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT_DIR="$(dirname "$SCRIPT_DIR")"
+ROOT_DIR="$(dirname "$(dirname "$SCRIPT_DIR")")"
 APP_DIR="$ROOT_DIR/app"
 TOOLS_DIR="$APP_DIR/tools"
 PLATFORM="$(uname -s)"
@@ -37,7 +37,7 @@ echo ""
 mkdir -p "$RUNTIME_DIR" "$MODELS_DIR" "$OUTPUTS_DIR" "$CACHE_DIR"
 
 if [[ ! -x "$NODE_BIN" || ! -x "$NPM_BIN" ]]; then
-  print_fail "Portable Node.js is missing. Run scripts/setup.sh first."
+  print_fail "Portable Node.js is missing. Run scripts/setup/setup.sh first."
   exit 1
 fi
 

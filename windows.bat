@@ -6,7 +6,7 @@ set APP=%~dp0app
 set NODE=%APP%\tools\node-win\node.exe
 set NPM=%APP%\tools\node-win\npm.cmd
 set DIST=%APP%\dist\index.html
-set SETUP=%~dp0scripts\setup.ps1
+set SETUP=%~dp0scripts\setup\setup.ps1
 set CUDA_BACKEND=%APP%\backend\win\cuda\sd-cuda.exe
 set VULKAN_BACKEND=%APP%\backend\win\vulkan\sd-vulkan.exe
 set LLM_CUDA_BACKEND=%APP%\llm-backend\win\cuda\llama-server.exe
@@ -14,9 +14,9 @@ set LLM_HIP_BACKEND=%APP%\llm-backend\win\hip\llama-server.exe
 set LLM_VULKAN_BACKEND=%APP%\llm-backend\win\vulkan\llama-server.exe
 set LLM_SYCL_BACKEND=%APP%\llm-backend\win\sycl\llama-server.exe
 set LLM_CPU_BACKEND=%APP%\llm-backend\win\cpu\llama-server.exe
-set SPEECH_BACKEND=%APP%\speech-backend\win\whisper-cli.exe
+set SPEECH_BACKEND=%APP%\speech-backend\win\cpu\whisper-cli.exe
 set TTS_RUNTIME=%APP%\tts-runtime\node_modules\kokoro-js
-set SERVE=%~dp0scripts\serve.cjs
+set SERVE=%~dp0scripts\server\serve.cjs
 if "%FRONTEND_PORT%"=="" set FRONTEND_PORT=1420
 if "%LLM_PORT%"=="" set LLM_PORT=10086
 set SETUP_REASON=

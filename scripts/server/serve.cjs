@@ -38,7 +38,7 @@ let PORT_SPEECH = PREFERRED_SPEECH_PORT;
 let PORT_TTS = PREFERRED_TTS_PORT;
 const MAX_JSON_BODY_BYTES = 64 * 1024 * 1024;
 const SERVER_BUILD = "text-image-v1";
-const ROOT    = path.join(__dirname, "..");
+const ROOT    = path.join(__dirname, "..", "..");
 const DIST    = path.join(ROOT, "app", "dist");
 const osPlatform = process.platform;
 const BACKEND_PATHS = {
@@ -130,12 +130,25 @@ if (!fs.existsSync(TTS_CACHE)) {
   fs.mkdirSync(TTS_CACHE, { recursive: true });
 }
 const TTS_RUNTIME = path.join(ROOT, "app", "tts-runtime");
-const TTS_WORKER = path.join(ROOT, "scripts", "tts-kokoro-worker.mjs");
+const TTS_WORKER = path.join(ROOT, "scripts", "workers", "tts-kokoro-worker.mjs");
+const SPEECH_BACKEND_ROOT = path.join(ROOT, "app", "speech-backend");
 const SPEECH_BACKEND_PATHS = {
+  winVulkanCli: path.join(SPEECH_BACKEND_ROOT, "win", "vulkan", "whisper-cli.exe"),
+  winVulkanServer: path.join(SPEECH_BACKEND_ROOT, "win", "vulkan", "whisper-server.exe"),
+  winCpuCli: path.join(SPEECH_BACKEND_ROOT, "win", "cpu", "whisper-cli.exe"),
+  winCpuServer: path.join(SPEECH_BACKEND_ROOT, "win", "cpu", "whisper-server.exe"),
   winCli: path.join(ROOT, "app", "speech-backend", "win", "whisper-cli.exe"),
   winServer: path.join(ROOT, "app", "speech-backend", "win", "whisper-server.exe"),
+  linuxVulkanCli: path.join(SPEECH_BACKEND_ROOT, "linux", "vulkan", "whisper-cli"),
+  linuxVulkanServer: path.join(SPEECH_BACKEND_ROOT, "linux", "vulkan", "whisper-server"),
+  linuxCpuCli: path.join(SPEECH_BACKEND_ROOT, "linux", "cpu", "whisper-cli"),
+  linuxCpuServer: path.join(SPEECH_BACKEND_ROOT, "linux", "cpu", "whisper-server"),
   linuxCli: path.join(ROOT, "app", "speech-backend", "linux", "whisper-cli"),
   linuxServer: path.join(ROOT, "app", "speech-backend", "linux", "whisper-server"),
+  macMetalCli: path.join(SPEECH_BACKEND_ROOT, "mac", "metal", "whisper-cli"),
+  macMetalServer: path.join(SPEECH_BACKEND_ROOT, "mac", "metal", "whisper-server"),
+  macCpuCli: path.join(SPEECH_BACKEND_ROOT, "mac", "cpu", "whisper-cli"),
+  macCpuServer: path.join(SPEECH_BACKEND_ROOT, "mac", "cpu", "whisper-server"),
   macCli: path.join(ROOT, "app", "speech-backend", "mac", "whisper-cli"),
   macServer: path.join(ROOT, "app", "speech-backend", "mac", "whisper-server"),
 };
@@ -227,6 +240,7 @@ let speechSettings = {
   model: null,
   language: "auto",
   threads: Math.max(1, Math.min(8, os.cpus().length || 4)),
+  backendPreference: "auto",
   backendBinary: "",
   backendMode: "",
 };
@@ -1391,8 +1405,8 @@ function getOpenVinoNpuInfo() {
   const python = getOpenVinoPython();
   if (!python) {
     const setupScript = osPlatform === "win32"
-      ? "scripts/setup-openvino-npu.ps1"
-      : "bash scripts/setup-openvino-npu.sh";
+      ? "scripts/setup/setup-openvino-npu.ps1"
+      : "bash scripts/setup/setup-openvino-npu.sh";
     cachedOpenVinoNpuInfo = {
       supported: false,
       reason: `OpenVINO GenAI runtime is not installed. Run ${setupScript} first.`,
@@ -1669,25 +1683,86 @@ function findExistingFile(candidates) {
   return candidates.find((candidate) => candidate && fs.existsSync(candidate)) || "";
 }
 
-function getSpeechBackend() {
+function getSpeechBackendCandidates() {
   if (osPlatform === "win32") {
-    return {
-      cli: findExistingFile([SPEECH_BACKEND_PATHS.winCli, path.join(ROOT, "app", "speech-backend", "win", "main.exe")]),
-      server: findExistingFile([SPEECH_BACKEND_PATHS.winServer, path.join(ROOT, "app", "speech-backend", "win", "server.exe")]),
-      mode: "whisper.cpp CPU",
-    };
+    return [
+      {
+        key: "vulkan",
+        label: "Vulkan GPU",
+        mode: "whisper.cpp Vulkan GPU",
+        cli: findExistingFile([SPEECH_BACKEND_PATHS.winVulkanCli, path.join(SPEECH_BACKEND_ROOT, "win", "vulkan", "main.exe")]),
+        server: findExistingFile([SPEECH_BACKEND_PATHS.winVulkanServer, path.join(SPEECH_BACKEND_ROOT, "win", "vulkan", "server.exe")]),
+        pathHint: path.join(SPEECH_BACKEND_ROOT, "win", "vulkan"),
+      },
+      {
+        key: "cpu",
+        label: "CPU",
+        mode: "whisper.cpp CPU",
+        cli: findExistingFile([SPEECH_BACKEND_PATHS.winCpuCli, SPEECH_BACKEND_PATHS.winCli, path.join(SPEECH_BACKEND_ROOT, "win", "cpu", "main.exe"), path.join(SPEECH_BACKEND_ROOT, "win", "main.exe")]),
+        server: findExistingFile([SPEECH_BACKEND_PATHS.winCpuServer, SPEECH_BACKEND_PATHS.winServer, path.join(SPEECH_BACKEND_ROOT, "win", "cpu", "server.exe"), path.join(SPEECH_BACKEND_ROOT, "win", "server.exe")]),
+        pathHint: path.join(SPEECH_BACKEND_ROOT, "win", "cpu"),
+      },
+    ];
   }
   if (osPlatform === "darwin") {
-    return {
-      cli: findExistingFile([SPEECH_BACKEND_PATHS.macCli, path.join(ROOT, "app", "speech-backend", "mac", "main")]),
-      server: findExistingFile([SPEECH_BACKEND_PATHS.macServer, path.join(ROOT, "app", "speech-backend", "mac", "server")]),
-      mode: "whisper.cpp Metal/CPU",
-    };
+    return [
+      {
+        key: "metal",
+        label: "Metal GPU",
+        mode: "whisper.cpp Metal GPU",
+        cli: findExistingFile([SPEECH_BACKEND_PATHS.macMetalCli, path.join(SPEECH_BACKEND_ROOT, "mac", "metal", "main")]),
+        server: findExistingFile([SPEECH_BACKEND_PATHS.macMetalServer, path.join(SPEECH_BACKEND_ROOT, "mac", "metal", "server")]),
+        pathHint: path.join(SPEECH_BACKEND_ROOT, "mac", "metal"),
+      },
+      {
+        key: "cpu",
+        label: "CPU",
+        mode: "whisper.cpp CPU",
+        cli: findExistingFile([SPEECH_BACKEND_PATHS.macCpuCli, SPEECH_BACKEND_PATHS.macCli, path.join(SPEECH_BACKEND_ROOT, "mac", "cpu", "main"), path.join(SPEECH_BACKEND_ROOT, "mac", "main")]),
+        server: findExistingFile([SPEECH_BACKEND_PATHS.macCpuServer, SPEECH_BACKEND_PATHS.macServer, path.join(SPEECH_BACKEND_ROOT, "mac", "cpu", "server"), path.join(SPEECH_BACKEND_ROOT, "mac", "server")]),
+        pathHint: path.join(SPEECH_BACKEND_ROOT, "mac", "cpu"),
+      },
+    ];
   }
+  return [
+    {
+      key: "vulkan",
+      label: "Vulkan GPU",
+      mode: "whisper.cpp Vulkan GPU",
+      cli: findExistingFile([SPEECH_BACKEND_PATHS.linuxVulkanCli, path.join(SPEECH_BACKEND_ROOT, "linux", "vulkan", "main")]),
+      server: findExistingFile([SPEECH_BACKEND_PATHS.linuxVulkanServer, path.join(SPEECH_BACKEND_ROOT, "linux", "vulkan", "server")]),
+      pathHint: path.join(SPEECH_BACKEND_ROOT, "linux", "vulkan"),
+    },
+    {
+      key: "cpu",
+      label: "CPU",
+      mode: "whisper.cpp CPU",
+      cli: findExistingFile([SPEECH_BACKEND_PATHS.linuxCpuCli, SPEECH_BACKEND_PATHS.linuxCli, path.join(SPEECH_BACKEND_ROOT, "linux", "cpu", "main"), path.join(SPEECH_BACKEND_ROOT, "linux", "main")]),
+      server: findExistingFile([SPEECH_BACKEND_PATHS.linuxCpuServer, SPEECH_BACKEND_PATHS.linuxServer, path.join(SPEECH_BACKEND_ROOT, "linux", "cpu", "server"), path.join(SPEECH_BACKEND_ROOT, "linux", "server")]),
+      pathHint: path.join(SPEECH_BACKEND_ROOT, "linux", "cpu"),
+    },
+  ];
+}
+
+function normalizeSpeechBackendPreference(value) {
+  const raw = String(value || "auto").trim().toLowerCase();
+  if (["auto", "cpu", "vulkan", "metal"].includes(raw)) return raw;
+  return "auto";
+}
+
+function getSpeechBackend(preference = speechSettings.backendPreference) {
+  const candidates = getSpeechBackendCandidates().map((candidate) => ({
+    ...candidate,
+    installed: Boolean(candidate.cli),
+  }));
+  const preferred = normalizeSpeechBackendPreference(preference);
+  const selected = preferred === "auto"
+    ? candidates.find((candidate) => candidate.installed) || candidates[candidates.length - 1]
+    : candidates.find((candidate) => candidate.key === preferred) || candidates.find((candidate) => candidate.installed) || candidates[candidates.length - 1];
   return {
-    cli: findExistingFile([SPEECH_BACKEND_PATHS.linuxCli, path.join(ROOT, "app", "speech-backend", "linux", "main")]),
-    server: findExistingFile([SPEECH_BACKEND_PATHS.linuxServer, path.join(ROOT, "app", "speech-backend", "linux", "server")]),
-    mode: "whisper.cpp CPU",
+    ...(selected || { key: "cpu", label: "CPU", mode: "whisper.cpp CPU", cli: "", server: "" }),
+    preference: preferred,
+    candidates,
   };
 }
 
@@ -1846,7 +1921,7 @@ function runExclusiveTtsOperation(operation) {
 async function startTts(settings = {}) {
   const runtime = getTtsRuntimeStatus();
   if (!runtime.installed) {
-    throw new Error("Kokoro TTS runtime is not installed. Run scripts/setup-tts for this platform.");
+    throw new Error("Kokoro TTS runtime is not installed. Run scripts/setup/setup-tts for this platform.");
   }
   const model = resolveTtsModel(settings.model || ttsSettings.model);
   await killBackend();
@@ -2041,9 +2116,10 @@ function runExclusiveSpeechOperation(operation) {
 }
 
 async function startSpeech(settings = {}) {
-  const backend = getSpeechBackend();
+  const backendPreference = normalizeSpeechBackendPreference(settings.backendPreference || speechSettings.backendPreference);
+  const backend = getSpeechBackend(backendPreference);
   if (!backend.cli) {
-    throw new Error("whisper.cpp is not installed. Run the platform setup script to install the speech backend.");
+    throw new Error(`${backend.label || "Selected"} whisper.cpp backend is not installed. Run setup or copy a compatible binary to ${backend.pathHint || "app/speech-backend"}.`);
   }
   const model = resolveSpeechModel(settings.model);
   await killBackend();
@@ -2057,6 +2133,7 @@ async function startSpeech(settings = {}) {
     model: model.filename,
     language: settings.language || speechSettings.language || "auto",
     threads: Math.max(1, Math.min(32, Number(settings.threads) || speechSettings.threads || 4)),
+    backendPreference,
     backendBinary: path.basename(backend.cli),
     backendMode: backend.mode,
   };
@@ -2146,9 +2223,10 @@ function transcribeWavBuffer(buffer, options = {}) {
       reject(new Error("Speech transcription currently accepts WAV audio only."));
       return;
     }
-    const backend = getSpeechBackend();
+    const backendPreference = normalizeSpeechBackendPreference(options.backendPreference || speechSettings.backendPreference);
+    const backend = getSpeechBackend(backendPreference);
     if (!backend.cli) {
-      reject(new Error("whisper.cpp CLI backend is not installed."));
+      reject(new Error(`${backend.label || "Selected"} whisper.cpp CLI backend is not installed.`));
       return;
     }
     const model = resolveSpeechModel(options.model || speechSettings.model);
@@ -2192,6 +2270,7 @@ function transcribeWavBuffer(buffer, options = {}) {
       windowsHide: true,
       env: {
         ...process.env,
+        ...(osPlatform === "win32" ? { PATH: path.dirname(backend.cli) + (process.env.PATH ? `;${process.env.PATH}` : "") } : {}),
         ...(osPlatform === "linux" ? { LD_LIBRARY_PATH: path.dirname(backend.cli) + (process.env.LD_LIBRARY_PATH ? `:${process.env.LD_LIBRARY_PATH}` : "") } : {}),
         ...(osPlatform === "darwin" ? { DYLD_LIBRARY_PATH: path.dirname(backend.cli) + (process.env.DYLD_LIBRARY_PATH ? `:${process.env.DYLD_LIBRARY_PATH}` : "") } : {}),
       },
@@ -2229,6 +2308,8 @@ function transcribeWavBuffer(buffer, options = {}) {
         model: model.filename,
         modelName: model.name,
         language,
+        backend: backend.key,
+        backendMode: backend.mode,
         sourceFilename,
         durationMs: Date.now() - startedAt,
         raw,
@@ -2656,7 +2737,7 @@ function getCoreMLNpuInfo() {
     return {
       supported: true,
       ready: false,
-      reason: "CoreML Python environment is not set up. Run scripts/setup-coreml-npu.sh first.",
+      reason: "CoreML Python environment is not set up. Run scripts/setup/setup-coreml-npu.sh first.",
     };
   }
 
@@ -3307,7 +3388,7 @@ async function startOpenVinoWorker(settings = {}) {
     device: currentSettings.backendDevice,
   };
 
-  const workerPath = path.join(ROOT, "scripts", "openvino_npu_worker.py");
+  const workerPath = path.join(ROOT, "scripts", "workers", "openvino_npu_worker.py");
   const cacheDir = path.join(ROOT, "app", "tools", "openvino-cache", "512x512");
   console.log(`  [openvino-npu] Starting 512x512 worker on port ${openvinoPort}`);
   openvinoProc = spawn(npuInfo.python, [
@@ -5030,6 +5111,8 @@ const server = http.createServer(async (req, res) => {
       backendPath: backend.cli || "",
       serverPath: backend.server || "",
       backendMode: backend.mode,
+      backendPreference: backend.preference,
+      backends: backend.candidates,
       error: speechError,
       settings: speechSettings,
       transcription: speechTranscriptionState,
@@ -5066,6 +5149,7 @@ const server = http.createServer(async (req, res) => {
         language: parsed.searchParams.get("language") || "auto",
         filename: parsed.searchParams.get("filename") || req.headers["x-filename"] || "recording.wav",
         threads: parsed.searchParams.get("threads") || speechSettings.threads,
+        backendPreference: parsed.searchParams.get("backendPreference") || speechSettings.backendPreference,
         translate: parsed.searchParams.get("translate") === "true",
       }));
       return json(res, 200, { ok: true, transcription: result });

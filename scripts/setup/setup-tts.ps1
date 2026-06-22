@@ -1,7 +1,7 @@
 # Local AI Studio - Kokoro TTS setup for Windows
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$rootDir = Split-Path -Parent $scriptDir
+$rootDir = Split-Path -Parent (Split-Path -Parent $scriptDir)
 $appDir = Join-Path $rootDir "app"
 $toolsDir = Join-Path $appDir "tools"
 $nodeDir = Join-Path $toolsDir "node-win"
@@ -25,7 +25,7 @@ Write-Host ""
 New-Item -ItemType Directory -Force -Path $runtimeDir, $modelsDir, $outputsDir, $cacheDir | Out-Null
 
 if (-not (Test-Path $nodeExe) -or -not (Test-Path $npmCmd)) {
-    Print-Fail "Portable Node.js is missing. Run scripts/setup.ps1 first."
+    Print-Fail "Portable Node.js is missing. Run scripts/setup/setup.ps1 first."
     exit 1
 }
 

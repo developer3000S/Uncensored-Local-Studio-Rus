@@ -73,24 +73,24 @@ The normal platform setup installs both image and text backends. Text and image 
 ## 📁 Repository Structure
 ```
 local-ai-image-generator/
-├── windows.bat                # Main double-click entrypoint (Windows)
-├── linux.sh                   # Main terminal entrypoint (Linux)
-├── mac.sh                     # Main terminal entrypoint (macOS)
-├── PLAN.md                    # Linux port implementation plan
-├── LICENSE                    # MIT Open Source license
-├── .gitignore
-├── README.md                  
-├── scripts/
-│   ├── setup.ps1              # Automated GPU-detect and environment installer (Windows)
-│   ├── setup.sh               # Automated GPU-detect and environment installer (Linux/macOS)
-│   ├── reset.ps1              # Cleans runtime environments (Windows)
-│   ├── reset.sh               # Cleans runtime environments (Linux/macOS)
-│   └── serve.cjs              # UI web server and backend lifecycle manager
-└── app/
-    ├── frontend/              # UI source code (Vite + React)
-    ├── models/                # Place weights here (.safetensors, .gguf, .ckpt)
-    └── outputs/               # Saved images and parameters metadata
-```
+|-- windows.bat                # Main double-click entrypoint (Windows)
+|-- linux.sh                   # Main terminal entrypoint (Linux)
+|-- mac.sh                     # Main terminal entrypoint (macOS)
+|-- PLAN.md                    # Linux port implementation plan
+|-- LICENSE                    # MIT Open Source license
+|-- .gitignore
+|-- README.md
+|-- scripts/
+|   |-- setup/                 # Platform setup and backend installers
+|   |-- reset/                 # Runtime cleanup scripts
+|   |-- server/                # UI server and backend lifecycle manager
+|   |-- workers/               # Local worker processes
+|   |-- build/                 # Optional source build helpers
+|   `-- config/                # Runtime configuration catalogs
+`-- app/
+    |-- frontend/              # UI source code (Vite + React)
+    |-- models/                # Place weights here (.safetensors, .gguf, .ckpt)
+    `-- outputs/               # Saved images and parameters metadata
 
 ---
 
@@ -157,9 +157,9 @@ Typical generation times for an image with **20 steps** (e.g. 512x512 resolution
 ---
 
 ## 🛠️ Troubleshooting
-*   **Reset Environment:** If a build fails or you want to clear dependencies, run `scripts/reset.ps1` (Windows) or `scripts/reset.sh` (Linux/macOS). (This preserves your models and generated images).
-*   **Port Conflicts:** The frontend uses `1420` by default. The backend tries `8080` first, then automatically falls back to a free port if `8080` is already busy.
+*   **Reset Environment:** If a build fails or you want to clear dependencies, run `scripts/reset/reset.ps1` (Windows) or `scripts/reset/reset.sh` (Linux/macOS). (This preserves your models and generated images).
 *   **Linux backends fail to start with `GLIBC_2.38' not found`:** The prebuilt binaries require glibc 2.38+ (Ubuntu 24.04). Upgrade your distribution or build stable-diffusion.cpp from source (see below).
+*   **Port Conflicts:** The frontend uses `1420` by default. The backend tries `8080` first, then automatically falls back to a free port if `8080` is already busy.
 *   **Linux ROCm not loading:** Make sure your AMD GPU and kernel are compatible with ROCm 7.13. The app will automatically fall back to Vulkan if ROCm cannot initialize.
 *   **Windows exits with code `3221225781`:** This is `0xC0000135`, which means Windows could not load a required backend DLL. For AMD/Intel Vulkan, update the GPU driver with Vulkan support, then rerun setup so `app/backend/win/vulkan/` is repaired. For NVIDIA CUDA, update the NVIDIA driver and rerun setup so CUDA runtime DLLs are restored.
 *   **Generation shows \"server is not responding or crashed\":** The backend process exited. Check the terminal where you ran `./linux.sh` or `./mac.sh` for the exact error (common causes are glibc mismatch, missing Vulkan drivers, or out-of-memory).
@@ -168,9 +168,9 @@ Typical generation times for an image with **20 steps** (e.g. 512x512 resolution
 
 ## 🔨 Building Linux Backends From Source
 
-The setup script (`scripts/setup.sh`) now automates building and setting up the CUDA backend from source when selected. If you want to manually build all backends (CPU, Vulkan, and CUDA) at once, you can run the included `scripts/build_from_source.sh` script.
+The setup script (`scripts/setup/setup.sh`) now automates building and setting up the CUDA backend from source when selected. If you want to manually build all backends (CPU, Vulkan, and CUDA) at once, you can run the included `scripts/build/build_from_source.sh` script.
 
-For macOS, the included `scripts/build_from_source.sh` builds the Metal backend and copies it to `app/backend/mac/sd`.
+For macOS, the included `scripts/build/build_from_source.sh` builds the Metal backend and copies it to `app/backend/mac/sd`.
 
 ### Requirements
 - `git`, `cmake`, `make` (or `ninja`), and a C++17 compiler (`g++` / `clang++`).
@@ -210,8 +210,7 @@ cmake --build . --config Release -j$(getconf _NPROCESSORS_ONLN 2>/dev/null || sy
 cp bin/sd* /path/to/Local-AI-Image-Generator/app/backend/linux/<backend>/
 ```
 
-After copying, rename the server binary to match what `scripts/serve.cjs` expects:
-- CPU: `sd` → `sd-cpu`
+After copying, rename the server binary to match what `scripts/server/serve.cjs` expects:
 - Vulkan: `sd` → `sd-vulkan`
 - ROCm: `sd` → `sd-rocm`
 

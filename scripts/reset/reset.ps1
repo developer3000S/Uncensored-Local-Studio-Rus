@@ -1,8 +1,8 @@
-# scripts/reset.ps1
+# scripts/reset/reset.ps1
 # Resets portable app dependencies/builds while preserving user models and outputs.
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$rootDir   = Split-Path -Parent $scriptDir
+$rootDir   = Split-Path -Parent (Split-Path -Parent $scriptDir)
 $appDir    = Join-Path $rootDir "app"
 
 Write-Host ""

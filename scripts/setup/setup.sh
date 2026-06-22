@@ -7,7 +7,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT_DIR="$(dirname "$SCRIPT_DIR")"
+ROOT_DIR="$(dirname "$(dirname "$SCRIPT_DIR")")"
 APP_DIR="$ROOT_DIR/app"
 FRONTEND_DIR="$APP_DIR/frontend"
 TOOLS_DIR="$APP_DIR/tools"
@@ -680,6 +680,6 @@ echo ""
 
 if [[ "$PLATFORM" == "Linux" && $MAX_PERF -eq 0 ]] && [[ "$VENDOR" == "nvidia" || "$VENDOR" == "amd" ]]; then
   echo "  Tip: For maximum GPU performance, re-run with:"
-  echo "       ./scripts/setup.sh --max-perf"
+  echo "       ./scripts/setup/setup.sh --max-perf"
   echo ""
 fi

@@ -145,10 +145,12 @@ export default function SpeechTranscriber({
 
   const language = speechSettings?.language || "auto";
   const threads = speechSettings?.threads || 4;
+  const backendPreference = speechSettings?.backendPreference || "auto";
   const translate = speechSettings?.translate === true;
 
   const setLanguage = (val) => setSpeechSettings((prev) => ({ ...prev, language: val }));
   const setThreads = (val) => setSpeechSettings((prev) => ({ ...prev, threads: val }));
+  const setBackendPreference = (val) => setSpeechSettings((prev) => ({ ...prev, backendPreference: val }));
 
   const [audioBlob, setAudioBlob] = useState(null);
   const [audioName, setAudioName] = useState("");
@@ -163,6 +165,9 @@ export default function SpeechTranscriber({
   const abortRef = useRef(null);
 
   const installedModels = useMemo(() => models.filter((model) => model.installed), [models]);
+  const isSelectedRuntimeLoaded = status.ready &&
+    status.settings?.model === selectedModel &&
+    (status.settings?.backendPreference || "auto") === backendPreference;
 
   const isEnglishOnly = useMemo(() => {
     if (!selectedModel) return false;
@@ -237,8 +242,8 @@ export default function SpeechTranscriber({
     if (!selectedModel) return;
     setIsLoadingModel(true);
     try {
-      if (!status.ready || status.settings?.model !== selectedModel) {
-        await startSpeech(selectedModel, { language, threads });
+      if (!isSelectedRuntimeLoaded) {
+        await startSpeech(selectedModel, { language, threads, backendPreference });
       }
       await refresh();
     } catch (err) {
@@ -300,10 +305,10 @@ export default function SpeechTranscriber({
     const controller = new AbortController();
     abortRef.current = controller;
     try {
-      if (!status.ready || status.settings?.model !== selectedModel) {
+      if (!isSelectedRuntimeLoaded) {
         setIsLoadingModel(true);
         try {
-          await startSpeech(selectedModel, { language, threads });
+          await startSpeech(selectedModel, { language, threads, backendPreference });
           await refresh();
         } finally {
           setIsLoadingModel(false);
@@ -313,6 +318,7 @@ export default function SpeechTranscriber({
         model: selectedModel,
         language,
         threads,
+        backendPreference,
         translate,
         filename: audioName || "audio.wav",
         signal: controller.signal,
@@ -387,6 +393,17 @@ export default function SpeechTranscriber({
 
           <div className="speech-controls-row">
             <label className="speech-label">
+              Backend
+              <select className="m3-input" value={backendPreference} onChange={(event) => setBackendPreference(event.target.value)}>
+                <option value="auto">Auto (GPU if installed)</option>
+                {(status.backends || []).map((backend) => (
+                  <option key={backend.key} value={backend.key}>
+                    {backend.label}{backend.installed ? " - installed" : " - missing"}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="speech-label">
               Language
               <select className="m3-input" value={language} onChange={(event) => setLanguage(event.target.value)}>
                 {LANGUAGE_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
@@ -420,10 +437,10 @@ export default function SpeechTranscriber({
             <button
               className="m3-btn m3-btn-filled"
               onClick={handleLoadSpeechModel}
-              disabled={!selectedModel || isLoadingModel || isTranscribing || (status.ready && status.settings?.model === selectedModel)}
+              disabled={!selectedModel || isLoadingModel || isTranscribing || isSelectedRuntimeLoaded}
             >
               {isLoadingModel ? <LoaderCircle className="progress-spinner" size={14} /> : <Play size={14} />}
-              <span>{status.ready && status.settings?.model === selectedModel ? "Loaded" : isLoadingModel ? "Loading" : "Load"}</span>
+              <span>{isSelectedRuntimeLoaded ? "Loaded" : isLoadingModel ? "Loading" : "Load"}</span>
             </button>
             <button className="m3-btn m3-btn-outlined" onClick={refresh}>
               <Play size={14} />

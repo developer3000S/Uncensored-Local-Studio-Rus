@@ -1,8 +1,8 @@
 # Local AI Image Generator - Setup Script
-# scripts/ lives at root, app/ is a sibling folder
+# scripts/setup/ lives under root, app/ is a root sibling of scripts/
 
 $scriptDir   = Split-Path -Parent $MyInvocation.MyCommand.Path
-$rootDir     = Split-Path -Parent $scriptDir
+$rootDir     = Split-Path -Parent (Split-Path -Parent $scriptDir)
 $appDir      = Join-Path $rootDir "app"
 $frontendDir = Join-Path $appDir  "frontend"
 $toolsDir    = Join-Path $appDir  "tools"
