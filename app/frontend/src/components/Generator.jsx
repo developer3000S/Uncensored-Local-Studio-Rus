@@ -183,8 +183,11 @@ function Generator({
         const settings = status.settings;
         const currentModelName = settings.model ? settings.model.split(/[\\/]/).pop() : null;
         const targetModelName = activeModel ? activeModel.split(/[\\/]/).pop() : null;
+        const requestedBackend = constraints.backendType || (constraints.useGpu === false ? "cpu" : "auto");
+        const currentBackend = settings.backendType || (settings.useGpu === false ? "cpu" : "auto");
+        const shouldCompareModel = requestedBackend !== "openvino-npu";
 
-        if (currentModelName !== targetModelName ||
+        if ((shouldCompareModel && currentModelName !== targetModelName) ||
             parseInt(settings.steps) !== parseInt(constraints.steps) ||
             Math.abs(parseFloat(settings.cfgScale) - parseFloat(constraints.cfgScale)) > 0.05 ||
             settings.sampler !== constraints.sampler ||
@@ -192,7 +195,7 @@ function Generator({
             Boolean(settings.useGpu) !== (constraints.useGpu !== false) ||
             parseInt(settings.width || 512) !== parseInt(constraints.width || 512) ||
             parseInt(settings.height || 512) !== parseInt(constraints.height || 512) ||
-            (settings.backendType || (settings.useGpu === false ? "cpu" : "auto")) !== (constraints.backendType || (constraints.useGpu === false ? "cpu" : "auto"))) {
+            currentBackend !== requestedBackend) {
           needsRestart = true;
         }
       } else {

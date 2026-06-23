@@ -205,6 +205,15 @@ export async function getBackendOptions() {
   };
 }
 
+export async function downloadBackend(backendId) {
+  const res = await fetch("/api/download-backend", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ backend_id: backendId }),
+  });
+  return await readJsonResponse(res, "The local server returned an invalid backend download response.");
+}
+
 // Get list of model files on the USB
 export async function listLocalModels() {
   if (isTauri()) {
@@ -247,19 +256,24 @@ export async function startServer(modelPath, constraints) {
   }
 
   // Web/portable mode — call serve.cjs management API
+  const backendType = constraints.backendType || (constraints.useGpu === false ? "cpu" : "auto");
   const modelName = modelPath ? modelPath.split(/[\\/]/).pop() : null;
+  const isOpenVinoBackend = backendType === "openvino-npu";
+  const requestModel = isOpenVinoBackend && /\.(safetensors|ckpt|gguf)$/i.test(modelName || "")
+    ? null
+    : modelName;
   try {
     const res = await fetch("/api/restart-backend", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        model:    modelName,
+        model:    requestModel,
         steps:    constraints.steps    || 20,
         cfgScale: constraints.cfgScale || 7.0,
         sampler:  constraints.sampler  || "euler_a",
         threads:  constraints.threads  || 8,
         use_gpu:  constraints.useGpu !== false,
-        backend_type: constraints.backendType || (constraints.useGpu === false ? "cpu" : "auto"),
+        backend_type: backendType,
         width: constraints.width || 512,
         height: constraints.height || 512,
         vae_tiling: constraints.vaeTiling !== false,

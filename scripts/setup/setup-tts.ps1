@@ -39,7 +39,7 @@ $oldPath = $env:PATH
 try {
     $env:PATH = "$nodeDir;$env:PATH"
     Print-Info "Installing kokoro-js into app/tts-runtime..."
-    & $npmCmd install --prefer-offline 2>&1
+    & $npmCmd install --prefer-offline --loglevel=error
     if ($LASTEXITCODE -ne 0) {
         Print-Fail "kokoro-js install failed."
         exit 1

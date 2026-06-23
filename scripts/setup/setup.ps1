@@ -158,7 +158,7 @@ function Expand-WithProgress {
 # ══════════════════════════════════════════════════════════════════════════════
 Print-Header
 
-$steps = 7
+$steps = 8
 
 # ── Step 1: Portable Node.js ──────────────────────────────────────────────────
 Print-Step 1 $steps "Setting up portable Node.js (app/tools/node-win/)"
@@ -240,6 +240,56 @@ if (-not $hasNvidia) {
         & nvidia-smi *> $null
         if ($LASTEXITCODE -eq 0) { $hasNvidia = $true }
     } catch {}
+}
+
+Print-Step 2 $steps "Setting up stable-diffusion.cpp CPU backend (app/backend/win/cpu/)"
+$cpuBackendDest = Join-Path $appDir "backend\win\cpu"
+$cpuBackendExe  = Join-Path $cpuBackendDest "sd-cpu.exe"
+$cpuBackendDll  = Join-Path $cpuBackendDest "stable-diffusion.dll"
+
+if ((Test-Path $cpuBackendExe) -and (Test-Path $cpuBackendDll)) {
+    Print-OK "CPU backend binaries already ready."
+} else {
+    $cpuBackendZip = Join-Path $toolsDir "sd-cpu.zip"
+    New-Item -ItemType Directory -Force -Path $toolsDir | Out-Null
+    New-Item -ItemType Directory -Force -Path $cpuBackendDest | Out-Null
+
+    $ok = Invoke-RichDownload `
+        -Url  "https://github.com/leejet/stable-diffusion.cpp/releases/download/master-669-2d40a8b/sd-master-2d40a8b-bin-win-avx2-x64.zip" `
+        -Dest $cpuBackendZip `
+        -Label "stable-diffusion.cpp CPU Backend (Windows x64 AVX2)"
+
+    if (-not $ok) { Print-Fail "Cannot download CPU backend binaries."; Read-Host; exit 1 }
+
+    $tempExt = Join-Path $toolsDir "sd-cpu-temp"
+    Expand-WithProgress -ZipPath $cpuBackendZip -Destination $tempExt -Label "CPU Backend"
+    Remove-Item $cpuBackendZip -Force
+
+    if (Test-Path $tempExt) {
+        $extractedExe = Join-Path $tempExt "bin\sd-server.exe"
+        if (-not (Test-Path $extractedExe)) { $extractedExe = Join-Path $tempExt "sd-server.exe" }
+        if (-not (Test-Path $extractedExe)) { $extractedExe = Join-Path $tempExt "bin\sd.exe" }
+        if (-not (Test-Path $extractedExe)) { $extractedExe = Join-Path $tempExt "sd.exe" }
+
+        $extractedDll = Join-Path $tempExt "bin\stable-diffusion.dll"
+        if (-not (Test-Path $extractedDll)) { $extractedDll = Join-Path $tempExt "stable-diffusion.dll" }
+
+        if (Test-Path $extractedExe) { Copy-Item $extractedExe $cpuBackendExe -Force }
+        if (Test-Path $extractedDll) { Copy-Item $extractedDll $cpuBackendDll -Force }
+
+        Get-ChildItem $tempExt -Filter "*.dll" -Recurse | ForEach-Object { Copy-Item $_.FullName $cpuBackendDest -Force }
+        Get-ChildItem $tempExt -Filter "*.exe" -Recurse | ForEach-Object {
+            if ($_.FullName -ne $extractedExe) { Copy-Item $_.FullName $cpuBackendDest -Force }
+        }
+        Remove-Item $tempExt -Recurse -Force
+    }
+
+    if ((Test-Path $cpuBackendExe) -and (Test-Path $cpuBackendDll)) {
+        Print-OK "CPU backend binaries installed successfully!"
+    } else {
+        Print-Fail "Failed to copy backend binaries to app/backend/win/cpu/."
+        Read-Host; exit 1
+    }
 }
 
 if ($hasNvidia) {
@@ -441,7 +491,22 @@ if (-not $?) {
     Read-Host; exit 1
 }
 
-Print-Step 6 $steps "Installing frontend dependencies (app/frontend/)"
+$npu = Get-CimInstance Win32_PnPEntity -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -like "*Intel(R) AI Boost*" -or ($_.Name -match "NPU" -and $_.PNPClass -eq "ComputeAccelerator") } |
+    Select-Object -First 1
+
+Print-Step 6 $steps "Setting up portable OpenVINO NPU runtime"
+if ($npu) {
+    & (Join-Path $scriptDir "setup-openvino-npu.ps1")
+    if (-not $?) {
+        Print-Fail "OpenVINO NPU setup failed."
+        Read-Host; exit 1
+    }
+} else {
+    Print-Info "Intel AI Boost NPU not detected. Skipping OpenVINO NPU runtime."
+}
+
+Print-Step 7 $steps "Installing frontend dependencies (app/frontend/)"
 Write-Host ""
 
 if (-not (Test-Path $npmCmd)) {
@@ -486,7 +551,7 @@ Push-Location $frontendDir
 $oldPath = $env:PATH
 try {
     $env:PATH = "$nodeDir;$env:PATH"
-    & $npmCmd install --prefer-offline 2>&1
+    & $npmCmd install --prefer-offline --loglevel=error
     if ($LASTEXITCODE -ne 0) {
         Print-Fail "npm install failed."
         Read-Host; exit 1
@@ -495,10 +560,10 @@ try {
     Print-OK "Dependencies installed!"
 
     # ── Step 4: Build frontend ────────────────────────────────────────────────
-    Print-Step 7 $steps "Building frontend -> app/dist/"
+    Print-Step 8 $steps "Building frontend -> app/dist/"
     Write-Host ""
 
-    & $npmCmd run build 2>&1
+    & $npmCmd run build
     if ($LASTEXITCODE -ne 0) {
         Print-Fail "Frontend build failed."
         Read-Host; exit 1

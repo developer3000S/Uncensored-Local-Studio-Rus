@@ -726,6 +726,44 @@ function ModelManager({
       return;
     }
 
+    const isOpenVinoSelected = constraints.backendType === "openvino-npu";
+    const isOpenVinoModel = modelInfo.backendType === "openvino-npu";
+    const isCoreMLModel = modelInfo.format === "CoreML" || modelInfo.backendType === "apple-npu";
+    const isStandardWeights = /\.(safetensors|ckpt|gguf)$/i.test(modelId) || (!isOpenVinoModel && !isCoreMLModel);
+    if (isOpenVinoSelected && isStandardWeights) {
+      const gpuBackend = backendOptions?.options?.find((backend) =>
+        ["vulkan", "cuda", "rocm", "metal"].includes(backend.id)
+      );
+      const cpuBackend = backendOptions?.options?.find((backend) => backend.id === "cpu");
+      const targetBackend = gpuBackend || cpuBackend;
+
+      if (!targetBackend) {
+        await showAlert({
+          title: "Switch Backend Required",
+          message: `"${modelId}" is a standard weights file. OpenVINO NPU can only load downloaded OpenVINO model folders, and no GPU or CPU backend is currently installed.`,
+          danger: true,
+        });
+        return;
+      }
+
+      const confirmed = await showConfirm({
+        title: "Switch Accelerator?",
+        message: `"${modelId}" cannot load on OpenVINO NPU. Switch to ${targetBackend.label} and load it there?`,
+        confirmLabel: `Switch to ${targetBackend.label}`,
+        cancelLabel: "Cancel",
+      });
+      if (!confirmed) return;
+
+      const nextConstraints = {
+        ...constraints,
+        backendType: targetBackend.id,
+        useGpu: targetBackend.id !== "cpu",
+      };
+      setConstraints(nextConstraints);
+      await performLoadModel(modelId, nextConstraints);
+      return;
+    }
+
     const totalSizeBytes = Number(modelInfo.sizeBytes) || 0;
     if (totalSizeBytes <= 0) {
       await performLoadModel(modelId);
@@ -944,6 +982,7 @@ function ModelManager({
       
       let isReady = false;
       let crashError = null;
+      let readyStatus = null;
       const isOpenVinoModel = modelInfo?.backendType === "openvino-npu";
       const maxStartupPolls = (isOpenVinoModel || isCoreMLModel) ? 1200 : 240;
       for (let i = 0; i < maxStartupPolls; i++) {
@@ -967,6 +1006,7 @@ function ModelManager({
         }
         if (status.ready) {
           isReady = true;
+          readyStatus = status;
           break;
         }
         if (status.error) {
@@ -981,6 +1021,9 @@ function ModelManager({
       }
 
       if (isReady) {
+        const loadedModelId = readyStatus?.settings?.backendType === "openvino-npu"
+          ? (readyStatus.settings.model || readyStatus.loading?.model || modelId)
+          : modelId;
         setModelLoadProgress((prev) => ({
           ...(prev || {}),
           progress: 100,
@@ -988,9 +1031,9 @@ function ModelManager({
           speed: "",
           current: prev?.current || 0,
           total: prev?.total || 0,
-          model: modelId,
+          model: loadedModelId,
         }));
-        setActiveModel(modelId);
+        setActiveModel(loadedModelId);
         setServerRunning(true);
       } else {
         throw new Error(crashError || `Model server failed to respond on port ${backendPort}.`);

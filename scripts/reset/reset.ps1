@@ -11,10 +11,10 @@ Write-Host "   Resetting Local AI Studio..." -ForegroundColor Yellow
 Write-Host "  ============================================================" -ForegroundColor Yellow
 Write-Host ""
 
-# Delete tools/node
+# Delete portable tools/runtime folder
 $toolsDir = Join-Path $appDir "tools"
 if (Test-Path $toolsDir) {
-    Write-Host "   >> Removing portable tools/ node folder..." -ForegroundColor Cyan
+    Write-Host "   >> Removing portable tools/runtime folder..." -ForegroundColor Cyan
     Remove-Item $toolsDir -Recurse -Force -ErrorAction SilentlyContinue
 }
 
@@ -23,6 +23,7 @@ $backendDir = Join-Path $appDir "backend"
 if (Test-Path $backendDir) {
     Write-Host "   >> Removing image backend binaries..." -ForegroundColor Cyan
     Remove-Item $backendDir -Recurse -Force -ErrorAction SilentlyContinue
+    Write-Host "      Preserving source workers in scripts/workers." -ForegroundColor DarkGray
 }
 
 # Delete llama.cpp backend

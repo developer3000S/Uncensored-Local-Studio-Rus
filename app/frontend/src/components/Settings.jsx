@@ -3,9 +3,22 @@ import {
   Crop, Sliders, Cpu, Info, MessageSquare, SlidersHorizontal, Zap,
   ChevronDown, Image, Type, Settings2, Gauge, Brain, Sparkles,
   Monitor, HardDrive, MemoryStick, Thermometer, Hash, Layers,
-  ChevronRight, Box, Wand2, Lightbulb, RotateCcw, Check, Palette, Volume2
+  ChevronRight, Box, Wand2, Lightbulb, RotateCcw, Check, Palette, Volume2,
+  DownloadCloud, RefreshCw
 } from "lucide-react";
-import { stopServer, formatBytes, getLlmBackends, getLlmStats, getLlmStatus, benchmarkLlm, startLlm, stopLlm } from "../services/api";
+import {
+  stopServer,
+  formatBytes,
+  getLlmBackends,
+  getLlmStats,
+  getLlmStatus,
+  benchmarkLlm,
+  startLlm,
+  stopLlm,
+  downloadBackend,
+  getDownloadProgress,
+  getBackendOptions,
+} from "../services/api";
 import { THEMES } from "../themes";
 
 const ASPECT_RATIOS = [
@@ -200,6 +213,7 @@ function Settings({
   activeModel,
   specs,
   backendOptions,
+  setBackendOptions,
   serverRunning,
   setServerRunning,
   setActiveModel,
@@ -225,6 +239,13 @@ function Settings({
   const [llmBackends, setLlmBackends] = useState({ available: [], candidates: [] });
   const [llmStats, setLlmStats] = useState({ benchmarks: [] });
   const [benchmarkBusy, setBenchmarkBusy] = useState(false);
+  const [backendDownload, setBackendDownload] = useState({
+    active: false,
+    backendId: "",
+    progress: 0,
+    speed: "",
+    error: null,
+  });
 
   const [expandedSections, setExpandedSections] = useState(() => {
     return {
@@ -273,6 +294,68 @@ function Settings({
   const availableBackends = backendOptions?.options?.length
     ? backendOptions.options
     : [{ id: "cpu", label: "CPU", available: true }];
+  const unavailableBackends = Array.isArray(backendOptions?.unavailable)
+    ? backendOptions.unavailable.filter((backend) => !availableBackends.some((available) => available.id === backend.id))
+    : [];
+  const visibleBackends = [...availableBackends, ...unavailableBackends.map((backend) => ({ ...backend, available: false }))];
+
+  const refreshBackendOptions = useCallback(async () => {
+    if (typeof setBackendOptions !== "function") return;
+    const nextOptions = await getBackendOptions();
+    setBackendOptions(nextOptions);
+  }, [setBackendOptions]);
+
+  useEffect(() => {
+    refreshBackendOptions().catch(() => {});
+    const handleFocus = () => refreshBackendOptions().catch(() => {});
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") handleFocus();
+    };
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [refreshBackendOptions]);
+
+  useEffect(() => {
+    if (!backendDownload.active) return undefined;
+    let cancelled = false;
+
+    const poll = async () => {
+      try {
+        const progress = await getDownloadProgress();
+        if (cancelled) return;
+        setBackendDownload((prev) => ({
+          ...prev,
+          active: Boolean(progress.active),
+          progress: Number(progress.progress ?? prev.progress ?? 0),
+          speed: progress.speed || prev.speed || "",
+          error: progress.error || null,
+        }));
+
+        if (!progress.active && !progress.error) {
+          await refreshBackendOptions();
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setBackendDownload((prev) => ({
+            ...prev,
+            active: false,
+            error: err.message || "Download failed",
+          }));
+        }
+      }
+    };
+
+    poll();
+    const interval = setInterval(poll, 700);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [backendDownload.active, refreshBackendOptions]);
 
   const updateConstraint = (key, value) => {
     setConstraints((prev) => ({
@@ -464,6 +547,33 @@ function Settings({
           }
         : {}),
     }));
+  };
+
+  const handleBackendDownload = async (backend) => {
+    if (!backend?.id || backendDownload.active) return;
+    try {
+      setBackendDownload({
+        active: true,
+        backendId: backend.id,
+        progress: 0,
+        speed: "Starting",
+        error: null,
+      });
+      await downloadBackend(backend.id);
+    } catch (err) {
+      setBackendDownload({
+        active: false,
+        backendId: backend.id,
+        progress: 0,
+        speed: "",
+        error: err.message || "Download failed",
+      });
+      await showAlert({
+        title: "Backend Download Failed",
+        message: err.message || "Could not start backend download.",
+        danger: true,
+      });
+    }
   };
 
   // ─── Image Settings ───
@@ -667,17 +777,79 @@ function Settings({
                   <span className="m3-slider-label">Accelerator</span>
                 </div>
                 <div className="m3-segmented-button" style={{ flexWrap: "wrap" }}>
-                  {availableBackends.map((b) => (
+                  {visibleBackends.map((b) => {
+                    const isAvailable = b.available !== false;
+                    const isDownloading = backendDownload.active && backendDownload.backendId === b.id;
+                    return (
                     <button
                       key={b.id}
-                      className={`m3-segment-item ${constraints.backendType === b.id ? "active" : ""}`}
-                      onClick={() => handleBackendChange(b.id)}
+                      className={`m3-segment-item ${constraints.backendType === b.id ? "active" : ""} ${!isAvailable ? "disabled" : ""}`}
+                      onClick={() => isAvailable && handleBackendChange(b.id)}
+                      disabled={!isAvailable}
+                      title={!isAvailable ? b.reason : undefined}
                       style={{ flex: "1 1 auto", minWidth: "80px" }}
                     >
-                      {b.label}
+                      {isDownloading ? `${Math.max(0, Math.min(100, Math.round(backendDownload.progress)))}%` : b.label}
                     </button>
-                  ))}
+                    );
+                  })}
                 </div>
+                {unavailableBackends.length > 0 && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginTop: "10px" }}>
+                    {unavailableBackends.map((backend) => {
+                      const isDownloading = backendDownload.active && backendDownload.backendId === backend.id;
+                      const progress = Math.max(0, Math.min(100, Math.round(backendDownload.progress || 0)));
+                      return (
+                        <div
+                          key={`download-${backend.id}`}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            gap: "10px",
+                            padding: "10px",
+                            border: "1px solid var(--md-sys-color-outline-variant)",
+                            borderRadius: "8px",
+                            background: "var(--md-sys-color-surface-container-low)",
+                          }}
+                        >
+                          <div style={{ minWidth: 0, flex: 1 }}>
+                            <div style={{ fontWeight: 700, color: "var(--md-sys-color-on-surface)" }}>
+                              {backend.label}
+                            </div>
+                            <div className="settings-option-desc" title={backendDownload.error || backend.reason}>
+                              {isDownloading
+                                ? `${progress}% ${backendDownload.speed ? `- ${backendDownload.speed}` : ""}`
+                                : backendDownload.error && backendDownload.backendId === backend.id
+                                  ? backendDownload.error
+                                  : backend.reason}
+                            </div>
+                            {isDownloading && (
+                              <div className="model-progress-bar" style={{ marginTop: "6px" }}>
+                                <div
+                                  className="model-progress-fill"
+                                  style={{
+                                    width: `${progress}%`,
+                                    transition: "width 0.2s ease",
+                                  }}
+                                />
+                              </div>
+                            )}
+                          </div>
+                          <button
+                            className="m3-btn m3-btn-tonal"
+                            onClick={() => handleBackendDownload(backend)}
+                            disabled={backendDownload.active}
+                            style={{ flexShrink: 0 }}
+                          >
+                            {isDownloading ? <RefreshCw className="progress-spinner" size={14} /> : <DownloadCloud size={14} />}
+                            <span>{isDownloading ? "Downloading" : "Download"}</span>
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </div>
           </div>

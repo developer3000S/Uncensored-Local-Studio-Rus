@@ -41,10 +41,12 @@ const MAX_JSON_BODY_BYTES = 64 * 1024 * 1024;
 const SERVER_BUILD = "text-image-v1";
 const ROOT    = path.join(__dirname, "..", "..");
 const DIST    = path.join(ROOT, "app", "dist");
+const TOOLS   = path.join(ROOT, "app", "tools");
 const osPlatform = process.platform;
 const BACKEND_PATHS = {
   cuda: path.join(ROOT, "app", "backend", "win", "cuda", "sd-cuda.exe"),
   vulkan: path.join(ROOT, "app", "backend", "win", "vulkan", "sd-vulkan.exe"),
+  cpu: path.join(ROOT, "app", "backend", "win", "cpu", "sd-cpu.exe"),
   mac: path.join(ROOT, "app", "backend", "mac", "sd"),
   linuxCpu: path.join(ROOT, "app", "backend", "linux", "cpu", "sd-server-cpu"),
   linuxVulkan: path.join(ROOT, "app", "backend", "linux", "vulkan", "sd-server-vulkan"),
@@ -67,6 +69,8 @@ if (osPlatform === "win32") {
 
   if (hasNvidia && fs.existsSync(BACKEND_PATHS.cuda)) {
     BACKEND_PATH = BACKEND_PATHS.cuda;
+  } else if (fs.existsSync(BACKEND_PATHS.cpu)) {
+    BACKEND_PATH = BACKEND_PATHS.cpu;
   } else {
     BACKEND_PATH = BACKEND_PATHS.vulkan;
   }
@@ -224,6 +228,7 @@ const OPENVINO_NPU_MODELS = [
 
 // ── Backend process state ─────────────────────────────────────────────────────
 let backendProc  = null;
+let backendProcSeq = 0;
 let backendReady = false;
 let backendError = null;
 let openvinoProc = null;
@@ -402,6 +407,24 @@ function getCpuUsagePercent() {
 
   if (totalDelta <= 0) return 0;
   return Math.max(0, Math.min(100, Math.round((1 - idleDelta / totalDelta) * 1000) / 10));
+}
+
+function hasVulkanRuntime() {
+  if (osPlatform !== "win32") return true;
+  try {
+    const sysPaths = [
+      path.join(process.env.SystemRoot || "C:\\Windows", "System32", "vulkan-1.dll"),
+      path.join(process.env.SystemRoot || "C:\\Windows", "SysWOW64", "vulkan-1.dll"),
+    ];
+    for (const dllPath of sysPaths) {
+      if (fs.existsSync(dllPath)) return true;
+    }
+    try {
+      execSync("where vulkan-1.dll", { stdio: "ignore" });
+      return true;
+    } catch (_) {}
+  } catch (_) {}
+  return false;
 }
 
 function detectLinuxGpuFromSysfs() {
@@ -776,6 +799,74 @@ function getGpuInfo() {
 
 // ── NPU Detection ─────────────────────────────────────────────────────────────
 let cachedNpuInfo = null;
+let cachedHasNpuHardware = null;
+
+function hasNpuHardware() {
+  if (cachedHasNpuHardware !== null) return cachedHasNpuHardware;
+
+  if (osPlatform !== "win32" && osPlatform !== "linux") {
+    cachedHasNpuHardware = false;
+    return cachedHasNpuHardware;
+  }
+
+  try {
+    if (osPlatform === "win32") {
+      const deviceResult = spawnSync("wmic", [
+        "path", "win32_pnpentity", "where", "Name like '%NPU%' or Name like '%Intel%AI%' or Name like '%VPU%'", "get", "Name", "/value"
+      ], { encoding: "utf8", timeout: 10000, stdio: ["ignore", "pipe", "pipe"] });
+      if (deviceResult.status === 0 && deviceResult.stdout && /NPU|AI Boost|VPU/i.test(deviceResult.stdout)) {
+        cachedHasNpuHardware = true;
+        return cachedHasNpuHardware;
+      }
+
+      const cpuResult = spawnSync("wmic", ["cpu", "get", "Name", "/value"], {
+        encoding: "utf8",
+        timeout: 10000,
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+      if (cpuResult.status === 0 && cpuResult.stdout) {
+        const cpuName = cpuResult.stdout.toLowerCase();
+        if (cpuName.includes("ultra") && (cpuName.match(/ultra\s*\d/) || cpuName.includes("core(tm) ultra"))) {
+          cachedHasNpuHardware = true;
+          return cachedHasNpuHardware;
+        }
+      }
+    } else if (osPlatform === "linux") {
+      const lspciResult = spawnSync("lspci", [], { encoding: "utf8", timeout: 10000, stdio: ["ignore", "pipe", "pipe"] });
+      if (lspciResult.status === 0 && lspciResult.stdout && lspciResult.stdout.toLowerCase().includes("npu")) {
+        cachedHasNpuHardware = true;
+        return cachedHasNpuHardware;
+      }
+
+      try {
+        const sysPci = fs.readdirSync("/sys/bus/pci/devices");
+        for (const dev of sysPci) {
+          const vendorPath = `/sys/bus/pci/devices/${dev}/vendor`;
+          const classPath = `/sys/bus/pci/devices/${dev}/class`;
+          if (!fs.existsSync(vendorPath) || !fs.existsSync(classPath)) continue;
+          const vendor = fs.readFileSync(vendorPath, "utf8").trim();
+          const devClass = fs.readFileSync(classPath, "utf8").trim();
+          if (vendor === "0x8086" && (devClass.includes("1180") || devClass.includes("acce"))) {
+            cachedHasNpuHardware = true;
+            return cachedHasNpuHardware;
+          }
+        }
+      } catch (_) {}
+
+      try {
+        const cpuInfo = fs.readFileSync("/proc/cpuinfo", "utf8").toLowerCase();
+        if (cpuInfo.includes("ultra") && cpuInfo.includes("intel")) {
+          cachedHasNpuHardware = true;
+          return cachedHasNpuHardware;
+        }
+      } catch (_) {}
+    }
+  } catch (_) {}
+
+  cachedHasNpuHardware = false;
+  return cachedHasNpuHardware;
+}
+
 function detectNpu() {
   if (cachedNpuInfo !== null) return cachedNpuInfo;
   cachedNpuInfo = { detected: false, vendor: null, name: null };
@@ -1372,15 +1463,10 @@ function getOpenVinoPythonCandidates() {
   const candidates = [];
   if (process.env.OPENVINO_PYTHON) candidates.push(process.env.OPENVINO_PYTHON);
   if (osPlatform === "win32") {
-    candidates.push(path.join(ROOT, "app", "tools", "openvino-venv-win", "Scripts", "python.exe"));
-    candidates.push(path.join(ROOT, "app", "tools", "openvino-venv", "Scripts", "python.exe")); // legacy fallback
-    candidates.push("C:\\tmp\\npu-test-venv\\Scripts\\python.exe");
-    candidates.push("python");
+    candidates.push(path.join(ROOT, "app", "tools", "python-win", "python.exe"));
   } else {
     candidates.push(path.join(ROOT, "app", "tools", "openvino-venv-linux", "bin", "python"));
     candidates.push(path.join(ROOT, "app", "tools", "openvino-venv", "bin", "python")); // legacy fallback
-    candidates.push("python3");
-    candidates.push("python");
   }
   return [...new Set(candidates)];
 }
@@ -2432,6 +2518,7 @@ function getSetupPaths() {
       distIndex: path.join(DIST, "index.html"),
       cudaBackend: BACKEND_PATHS.cuda,
       vulkanBackend: BACKEND_PATHS.vulkan,
+      cpuBackend: BACKEND_PATHS.cpu,
       models: MODELS,
       outputs: OUTPUTS,
     };
@@ -2472,6 +2559,7 @@ async function getHealth() {
   if (osPlatform === "win32") {
     checks.push(getPathInfo("CUDA backend", paths.cudaBackend));
     checks.push(getPathInfo("Vulkan backend", paths.vulkanBackend));
+    checks.push(getPathInfo("CPU backend", paths.cpuBackend));
   } else if (osPlatform === "darwin") {
     checks.push(getPathInfo("Mac backend", paths.macBackend));
   } else {
@@ -2483,7 +2571,8 @@ async function getHealth() {
   let backendInstalled = false;
   if (osPlatform === "win32") {
     backendInstalled = checks.find((check) => check.label === "CUDA backend")?.exists ||
-      checks.find((check) => check.label === "Vulkan backend")?.exists;
+      checks.find((check) => check.label === "Vulkan backend")?.exists ||
+      checks.find((check) => check.label === "CPU backend")?.exists;
   } else if (osPlatform === "darwin") {
     backendInstalled = checks.find((check) => check.label === "Mac backend")?.exists;
   } else {
@@ -2495,7 +2584,7 @@ async function getHealth() {
   }
 
   const criticalOk = checks
-    .filter((check) => !["CUDA backend", "Vulkan backend", "Linux CPU backend", "Linux Vulkan backend", "Linux ROCm backend", "Mac backend"].includes(check.label))
+    .filter((check) => !["CUDA backend", "Vulkan backend", "CPU backend", "Linux CPU backend", "Linux Vulkan backend", "Linux ROCm backend", "Mac backend"].includes(check.label))
     .every((check) => check.ok) && backendInstalled;
 
   const ports = {
@@ -2508,7 +2597,7 @@ async function getHealth() {
   ports.backend.ok = true;
 
   const issues = checks
-    .filter((check) => !check.ok && !["CUDA backend", "Vulkan backend", "Linux CPU backend", "Linux Vulkan backend", "Linux ROCm backend", "Mac backend"].includes(check.label))
+    .filter((check) => !check.ok && !["CUDA backend", "Vulkan backend", "CPU backend", "Linux CPU backend", "Linux Vulkan backend", "Linux ROCm backend", "Mac backend"].includes(check.label))
     .map((check) => `${check.label} is missing or not writable.`);
   if (!backendInstalled) {
     issues.push(`No ${osPlatform === "win32" ? "Windows" : osPlatform === "darwin" ? "macOS" : "Linux"} backend binary is installed.`);
@@ -2645,6 +2734,9 @@ function isRunningInWSL() {
 }
 
 function getVulkanUnavailableReason() {
+  if (osPlatform === "win32" && !hasVulkanRuntime()) {
+    return "The Vulkan runtime (vulkan-1.dll) is missing. Install or update your GPU vendor driver with Vulkan support, then run setup again so the Vulkan backend folder is repaired.";
+  }
   if (osPlatform === "linux" && isRunningInWSL()) {
     const gpuName = getGpuInfo().name;
     const lowerGpu = gpuName.toLowerCase();
@@ -2764,13 +2856,15 @@ function getBackendOptions() {
   );
   const vulkanInstalled = (osPlatform === "win32" && fs.existsSync(BACKEND_PATHS.vulkan)) ||
                           (osPlatform === "linux" && fs.existsSync(BACKEND_PATHS.linuxVulkan));
-  const vulkanAvailable = vulkanInstalled && backendAccepts(
+  const vulkanRuntimeAvailable = osPlatform !== "win32" || hasVulkanRuntime();
+  const vulkanAvailable = vulkanInstalled && vulkanRuntimeAvailable && backendAccepts(
     osPlatform === "win32" ? BACKEND_PATHS.vulkan : BACKEND_PATHS.linuxVulkan,
     "vulkan"
   );
   const rocmInstalled = osPlatform === "linux" && fs.existsSync(BACKEND_PATHS.linuxRocm);
   const rocmAvailable = rocmInstalled && hasAmdGpu() && backendAccepts(BACKEND_PATHS.linuxRocm, "rocm");
-  const cpuInstalled = osPlatform === "linux" && fs.existsSync(BACKEND_PATHS.linuxCpu);
+  const cpuInstalled = (osPlatform === "linux" && fs.existsSync(BACKEND_PATHS.linuxCpu)) ||
+                        (osPlatform === "win32" && fs.existsSync(BACKEND_PATHS.cpu));
   const metalInstalled = osPlatform === "darwin" && fs.existsSync(BACKEND_PATHS.mac);
   const metalAvailable = metalInstalled;
   const coremlNpu = getCoreMLNpuInfo();
@@ -2778,7 +2872,8 @@ function getBackendOptions() {
   const openvinoModels = getOpenVinoModelInfo();
   const openvinoNpuAvailable = openvinoNpu.supported && openvinoModels.some((model) => model.installed);
 
-  const options = [{ id: "cpu", label: "CPU", available: true }];
+  const options = [];
+  if (cpuInstalled) options.push({ id: "cpu", label: "CPU", available: true });
   if (metalAvailable) options.push({ id: "metal", label: "Metal GPU", available: true });
   if (coremlNpu.supported && coremlNpu.ready) options.push({ id: "apple-npu", label: "Apple Neural Engine (NPU)", available: true });
   if (vulkanAvailable) options.push({ id: "vulkan", label: "Vulkan GPU", available: true });
@@ -2802,9 +2897,18 @@ function getBackendOptions() {
   if (coremlNpu.supported && !coremlNpu.ready) {
     unavailable.push({ id: "apple-npu", label: "Apple Neural Engine (NPU)", reason: coremlNpu.reason });
   }
+  if (!cpuInstalled && (osPlatform === "win32" || osPlatform === "linux")) {
+    unavailable.push({
+      id: "cpu",
+      label: "CPU",
+      reason: osPlatform === "win32"
+        ? "Windows CPU backend is not installed. Run scripts/setup/setup.ps1 to install app/backend/win/cpu."
+        : "Linux CPU backend is not installed. Run setup again to install app/backend/linux/cpu.",
+    });
+  }
   if (openvinoNpu.supported && !openvinoNpuAvailable) {
     unavailable.push({ id: "openvino-npu", label: "NPU (OpenVINO)", reason: "Runtime is ready, but no OpenVINO NPU model is downloaded." });
-  } else if (!openvinoNpu.supported && (osPlatform === "win32" || osPlatform === "linux")) {
+  } else if (!openvinoNpu.supported && hasNpuHardware() && (osPlatform === "win32" || osPlatform === "linux")) {
     unavailable.push({ id: "openvino-npu", label: "NPU (OpenVINO)", reason: openvinoNpu.reason });
   }
 
@@ -2908,6 +3012,10 @@ function selectBackendPath(useGpu, backendType = "auto", modelPath = "") {
   const resolvedType = resolveBackendType(useGpu, backendType, modelPath);
   if (osPlatform === "win32") {
     if (resolvedType === "cuda" && fs.existsSync(BACKEND_PATHS.cuda)) return BACKEND_PATHS.cuda;
+    if (resolvedType === "cpu" && fs.existsSync(BACKEND_PATHS.cpu)) return BACKEND_PATHS.cpu;
+    if (resolvedType === "vulkan" && fs.existsSync(BACKEND_PATHS.vulkan)) return BACKEND_PATHS.vulkan;
+    if (fs.existsSync(BACKEND_PATHS.cuda)) return BACKEND_PATHS.cuda;
+    if (fs.existsSync(BACKEND_PATHS.cpu)) return BACKEND_PATHS.cpu;
     if (fs.existsSync(BACKEND_PATHS.vulkan)) return BACKEND_PATHS.vulkan;
     return BACKEND_PATH;
   }
@@ -3347,7 +3455,11 @@ function getOpenVinoResolution(settings = {}) {
 async function startOpenVinoWorker(settings = {}) {
   const npuInfo = getOpenVinoNpuInfo();
   if (!npuInfo.supported) throw new Error(npuInfo.reason || "OpenVINO NPU is not available.");
-  const model = findOpenVinoModel(settings.model) || getOpenVinoModelInfo().find((item) => item.installed);
+  const requestedModel = settings.model ? findOpenVinoModel(settings.model) : null;
+  if (settings.model && !requestedModel) {
+    throw new Error("OpenVINO NPU requires a downloaded OpenVINO model. Standard .safetensors/.ckpt weights must use Vulkan, CUDA, or CPU.");
+  }
+  const model = requestedModel || getOpenVinoModelInfo().find((item) => item.installed);
   if (!model || !model.installed) {
     throw new Error("OpenVINO NPU model is not downloaded. Download an OpenVINO NPU model from Model Manager first.");
   }
@@ -3512,18 +3624,19 @@ function getDefaultModel() {
 function killBackend() {
   return new Promise(resolve => {
     resetGenerationState();
-    if (!backendProc) {
+    const proc = backendProc;
+    if (!proc) {
       backendUnloadState = { active: false, phase: "", progress: 0 };
       resolve();
       return;
     }
     backendUnloadState = { active: true, phase: "Stopping backend process...", progress: 10 };
     backendReady = false;
-    backendProc.kill("SIGTERM");
+    try { proc.kill("SIGTERM"); } catch (_) {}
     backendUnloadState = { active: true, phase: "Waiting for process exit...", progress: 50 };
     setTimeout(() => {
-      try { backendProc.kill("SIGKILL"); } catch (_) {}
-      backendProc = null;
+      try { proc.kill("SIGKILL"); } catch (_) {}
+      if (backendProc === proc) backendProc = null;
       backendUnloadState = { active: false, phase: "Backend unloaded", progress: 100 };
       resolve();
     }, 2000);
@@ -3958,6 +4071,14 @@ async function startBackend(settings = {}) {
   currentSettings.backendType = resolvedBackendType;
   currentSettings.useGpu = resolvedBackendType !== "cpu";
   const backendPath = selectBackendPath(currentSettings.useGpu, currentSettings.backendType, currentSettings.model);
+  if (!backendPath) {
+    const setupHint = resolvedBackendType === "apple-npu"
+      ? "CoreML Python environment is not set up. Run scripts/setup/setup-coreml-npu.sh first."
+      : resolvedBackendType === "cpu" && osPlatform === "win32"
+        ? "Windows CPU backend is not installed. Run scripts/setup.ps1 again so app/backend/win/cpu is created."
+        : "No compatible backend executable was found.";
+    throw new Error(setupHint);
+  }
   const backendMode = getBackendMode(backendPath, currentSettings.useGpu, currentSettings.backendType);
   currentSettings.backendMode = backendMode;
   currentSettings.backendBinary = path.basename(backendPath);
@@ -3987,7 +4108,7 @@ async function startBackend(settings = {}) {
 
   if (requestedBackend === "apple-npu") {
     args = [
-      path.join(ROOT, "app", "backend", "mac", "coreml_server.py"),
+      path.join(ROOT, "scripts", "workers", "coreml_server.py"),
       "--listen-port", String(PORT_BACKEND),
       "--model",       currentSettings.model,
       "--steps",       String(currentSettings.steps),
@@ -4072,10 +4193,12 @@ async function startBackend(settings = {}) {
   console.log("  [backend] Starting:", path.basename(backendPath), args.join(" "));
   backendReady = false;
 
-  backendProc = spawn(backendPath, args, { stdio: "pipe", env: spawnEnv });
+  const procSeq = ++backendProcSeq;
+  const proc = spawn(backendPath, args, { stdio: "pipe", env: spawnEnv });
+  backendProc = proc;
   startBackendReadyPoll();
 
-  backendProc.stdout.on("data", d => {
+  proc.stdout.on("data", d => {
     const output = d.toString();
     process.stdout.write("  [sd] " + output);
     const cleanOutput = stripAnsi(output);
@@ -4155,7 +4278,7 @@ async function startBackend(settings = {}) {
     }
   });
 
-  backendProc.stderr.on("data", d => {
+  proc.stderr.on("data", d => {
     const output = d.toString();
     process.stderr.write("  [sd-err] " + output);
     const cleanOutput = stripAnsi(output);
@@ -4194,10 +4317,14 @@ async function startBackend(settings = {}) {
       }
     }
   });
-  backendProc.on("exit", code => {
+  proc.on("exit", (code, signal) => {
+    if (backendProc !== proc) {
+      console.log("  [backend] stale process exited with code", code, signal ? `(signal ${signal})` : "", `(process ${procSeq})`);
+      return;
+    }
     backendReady = false;
     backendProc  = null;
-    console.log("  [backend] exited with code", code);
+    console.log("  [backend] exited with code", code, signal ? `(signal ${signal})` : "", `(process ${procSeq})`);
     if (code !== null && code !== 0) {
       if (!backendError) {
         backendError = describeBackendExitCode(code, currentSettings.backendBinary || BACKEND_PATH);
@@ -4274,6 +4401,221 @@ function startOpenVinoModelDownload(modelId) {
       downloadState.error = `OpenVINO model download failed with code ${code}`;
     }
   });
+}
+
+const IMAGE_BACKEND_DOWNLOADS = {
+  "cpu": {
+    id: "cpu",
+    label: "CPU",
+    url: "https://github.com/leejet/stable-diffusion.cpp/releases/download/master-669-2d40a8b/sd-master-2d40a8b-bin-win-avx2-x64.zip",
+    destDir: path.join(ROOT, "app", "backend", "win", "cpu"),
+    exeName: "sd-cpu.exe",
+    requiredDll: "stable-diffusion.dll",
+  },
+  "vulkan": {
+    id: "vulkan",
+    label: "Vulkan GPU",
+    url: "https://github.com/leejet/stable-diffusion.cpp/releases/download/master-669-2d40a8b/sd-master-2d40a8b-bin-win-vulkan-x64.zip",
+    destDir: path.join(ROOT, "app", "backend", "win", "vulkan"),
+    exeName: "sd-vulkan.exe",
+    requiredDll: "stable-diffusion.dll",
+  },
+  "cuda": {
+    id: "cuda",
+    label: "CUDA GPU",
+    url: "https://github.com/leejet/stable-diffusion.cpp/releases/download/master-669-2d40a8b/sd-master-2d40a8b-bin-win-cuda12-x64.zip",
+    destDir: path.join(ROOT, "app", "backend", "win", "cuda"),
+    exeName: "sd-cuda.exe",
+    requiredDll: "stable-diffusion.dll",
+  },
+};
+
+function listFilesRecursive(dir) {
+  const out = [];
+  if (!fs.existsSync(dir)) return out;
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      out.push(...listFilesRecursive(full));
+    } else if (entry.isFile()) {
+      out.push(full);
+    }
+  }
+  return out;
+}
+
+function installImageBackendArchive(zipPath, backend) {
+  const tempDir = path.join(TOOLS, `image-backend-${backend.id}-extract-${Date.now()}`);
+  try {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+    fs.mkdirSync(tempDir, { recursive: true });
+    fs.mkdirSync(backend.destDir, { recursive: true });
+
+    const tar = spawnSync("tar.exe", ["-xf", zipPath, "-C", tempDir], { encoding: "utf8" });
+    if (tar.status !== 0) {
+      throw new Error((tar.stderr || tar.stdout || "Could not extract backend archive.").trim());
+    }
+
+    const files = listFilesRecursive(tempDir);
+    const exeSource = files.find((file) => ["sd-server.exe", "sd.exe"].includes(path.basename(file).toLowerCase()));
+    const dllSource = files.find((file) => path.basename(file).toLowerCase() === backend.requiredDll.toLowerCase());
+    if (!exeSource || !dllSource) {
+      throw new Error("Backend archive did not contain the expected stable-diffusion executable and DLL.");
+    }
+
+    fs.copyFileSync(exeSource, path.join(backend.destDir, backend.exeName));
+    fs.copyFileSync(dllSource, path.join(backend.destDir, backend.requiredDll));
+    for (const file of files) {
+      const ext = path.extname(file).toLowerCase();
+      if (ext !== ".dll" && ext !== ".exe") continue;
+      if (file === exeSource) continue;
+      fs.copyFileSync(file, path.join(backend.destDir, path.basename(file)));
+    }
+
+    if (!fs.existsSync(path.join(backend.destDir, backend.exeName)) || !fs.existsSync(path.join(backend.destDir, backend.requiredDll))) {
+      throw new Error(`Backend install did not create ${backend.exeName} and ${backend.requiredDll}.`);
+    }
+    cachedBackendOptions = null;
+  } finally {
+    try { fs.rmSync(tempDir, { recursive: true, force: true }); } catch (_) {}
+  }
+}
+
+function startImageBackendDownload(backendId, redirectCount = 0, redirectUrl = "") {
+  if (downloadState.active && redirectCount === 0) {
+    throw new Error("Another download is already active.");
+  }
+  if (osPlatform !== "win32") {
+    throw new Error("In-app backend downloads are currently available for Windows image backends.");
+  }
+  const backend = IMAGE_BACKEND_DOWNLOADS[String(backendId || "").toLowerCase()];
+  if (!backend) {
+    throw new Error("This backend cannot be installed from the app yet. Use the platform setup script.");
+  }
+
+  fs.mkdirSync(TOOLS, { recursive: true });
+  const url = redirectUrl || backend.url;
+  const filename = `${backend.id}-backend.zip`;
+  const destPath = path.join(TOOLS, filename);
+  const tempPath = `${destPath}.part`;
+  if (redirectCount === 0) {
+    try { fs.unlinkSync(tempPath); } catch (_) {}
+    downloadState = {
+      active: true,
+      filename: backend.label,
+      progress: 0,
+      speed: "0 MB/s",
+      eta: 0,
+      totalBytes: 0,
+      downloadedBytes: 0,
+      error: null,
+      kind: "backend",
+      backendId: backend.id,
+    };
+  }
+
+  console.log(`  [backend-download] Downloading ${backend.label} backend from ${url}`);
+  let downloadFinalized = false;
+  const fileStream = fs.createWriteStream(tempPath);
+  const failDownload = (message, err = null) => {
+    if (downloadFinalized) return;
+    downloadFinalized = true;
+    downloadState.active = false;
+    downloadState.error = message;
+    if (err) console.error("  [backend-download]", message, err);
+    else console.error("  [backend-download] Failed:", message);
+    try { fileStream.close(); } catch (_) {}
+    try { fs.unlinkSync(tempPath); } catch (_) {}
+    activeDownload = null;
+  };
+
+  fileStream.on("error", (err) => failDownload(`Could not write ${filename}: ${err.message}`, err));
+  const client = url.startsWith("https") ? https : http;
+  const request = client.get(url, {
+    headers: {
+      "User-Agent": "Local-AI-Image-Generator/1.0 (+https://github.com/techjarves/Local-AI-Image-Generator)",
+      "Accept": "application/zip, application/octet-stream, */*",
+    },
+  }, (response) => {
+    activeDownload = { request, fileStream, destPath, tempPath };
+    if ([301, 302, 303, 307, 308].includes(response.statusCode)) {
+      const nextUrl = response.headers.location ? new URL(response.headers.location, url).toString() : "";
+      if (!nextUrl) return failDownload("Redirect response did not include a Location header.");
+      if (redirectCount > 10) return failDownload("Too many redirects.");
+      downloadState.speed = "Following redirect";
+      request.removeAllListeners("error");
+      request.destroy();
+      response.resume();
+      fileStream.close();
+      try { fs.unlinkSync(tempPath); } catch (_) {}
+      activeDownload = null;
+      startImageBackendDownload(backend.id, redirectCount + 1, nextUrl);
+      return;
+    }
+    if (response.statusCode !== 200) {
+      return failDownload(describeDownloadHttpError(response.statusCode, url, response.headers));
+    }
+
+    const totalBytes = parseInt(response.headers["content-length"], 10) || 0;
+    downloadState.totalBytes = totalBytes;
+    let downloadedBytes = 0;
+    let lastTime = Date.now();
+    let lastDownloaded = 0;
+
+    response.on("data", (chunk) => {
+      downloadedBytes += chunk.length;
+      downloadState.downloadedBytes = downloadedBytes;
+      fileStream.write(chunk);
+      const now = Date.now();
+      const elapsed = (now - lastTime) / 1000;
+      if (elapsed >= 0.5) {
+        const chunkSpeed = (downloadedBytes - lastDownloaded) / elapsed;
+        lastDownloaded = downloadedBytes;
+        lastTime = now;
+        downloadState.speed = `${(chunkSpeed / (1024 * 1024)).toFixed(1)} MB/s`;
+        if (totalBytes > 0) {
+          downloadState.progress = Math.round((downloadedBytes / totalBytes) * 100);
+          downloadState.eta = Math.round((totalBytes - downloadedBytes) / Math.max(1, chunkSpeed));
+        } else {
+          downloadState.progress = -1;
+          downloadState.eta = -1;
+        }
+      }
+    });
+
+    response.on("aborted", () => failDownload(`Download interrupted before ${backend.label} backend finished.`));
+    response.on("error", (err) => failDownload(`Download stream failed before ${backend.label} backend finished.`, err));
+    response.on("end", () => {
+      if (downloadFinalized) return;
+      if (totalBytes > 0 && downloadedBytes !== totalBytes) {
+        failDownload(`Download incomplete for ${backend.label}: received ${formatBytes(downloadedBytes)} of ${formatBytes(totalBytes)}.`);
+        return;
+      }
+      fileStream.end(() => {
+        try {
+          try { fs.unlinkSync(destPath); } catch (_) {}
+          fs.renameSync(tempPath, destPath);
+          downloadState.speed = "Installing";
+          downloadState.progress = 95;
+          installImageBackendArchive(destPath, backend);
+          try { fs.unlinkSync(destPath); } catch (_) {}
+          downloadFinalized = true;
+          downloadState.active = false;
+          downloadState.progress = 100;
+          downloadState.downloadedBytes = downloadedBytes;
+          downloadState.error = null;
+          downloadState.speed = "Complete";
+          activeDownload = null;
+          console.log(`  [backend-download] Installed ${backend.label} backend`);
+        } catch (err) {
+          failDownload(`Could not install ${backend.label} backend: ${err.message}`, err);
+        }
+      });
+    });
+  });
+
+  request.on("error", (err) => failDownload(err.message, err));
+  activeDownload = { request, fileStream, destPath, tempPath };
 }
 
 // ── Generation State (Real-time progress parser) ─────────────────────────────
@@ -5903,6 +6245,20 @@ async function getLlmfitRecommendations(useCase = "chat", limit = 10) {
     return json(res, 200, { ok: true });
   }
 
+  // POST /api/download-backend
+  if (req.url === "/api/download-backend" && req.method === "POST") {
+    const body = await readJsonBody(req, res);
+    if (!body) return;
+    if (downloadState.active) return json(res, 409, { ok: false, error: "Another download is already active." });
+    try {
+      const backendId = String(body.backend_id || body.backendId || body.id || "");
+      startImageBackendDownload(backendId);
+      return json(res, 200, { ok: true, message: "Backend download started", backendId });
+    } catch (err) {
+      return json(res, 400, { ok: false, error: err.message || String(err) });
+    }
+  }
+
   // POST /api/download-model
   if (req.url === "/api/download-model" && req.method === "POST") {
     const body = await readJsonBody(req, res);
@@ -5958,6 +6314,25 @@ async function getLlmfitRecommendations(useCase = "chat", limit = 10) {
 
   // GET /api/download-progress
   if (req.url === "/api/download-progress" && req.method === "GET") {
+    if (!downloadState.active && downloadState.kind === "backend" && downloadState.backendId) {
+      const backend = IMAGE_BACKEND_DOWNLOADS[downloadState.backendId];
+      const installed = backend &&
+        fs.existsSync(path.join(backend.destDir, backend.exeName)) &&
+        fs.existsSync(path.join(backend.destDir, backend.requiredDll));
+      if (installed && !downloadState.error) {
+        cachedBackendOptions = null;
+        downloadState = {
+          active: false,
+          filename: "",
+          progress: 0,
+          speed: "0 MB/s",
+          eta: 0,
+          totalBytes: 0,
+          downloadedBytes: 0,
+          error: null,
+        };
+      }
+    }
     return json(res, 200, downloadState);
   }
 

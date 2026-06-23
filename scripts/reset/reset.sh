@@ -16,9 +16,9 @@ echo "   Resetting Local AI Studio..."
 echo "  ============================================================"
 echo ""
 
-# Delete tools/node
+# Delete portable tools/runtime folder
 if [[ -d "$APP_DIR/tools" ]]; then
-  echo "   >> Removing portable tools/ node folder..."
+  echo "   >> Removing portable tools/runtime folder..."
   rm -rf "$APP_DIR/tools"
 fi
 

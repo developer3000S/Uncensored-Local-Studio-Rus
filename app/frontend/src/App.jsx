@@ -769,6 +769,7 @@ function App() {
             activeModel={activeModel}
             specs={specs}
             backendOptions={backendOptions}
+            setBackendOptions={setBackendOptions}
             serverRunning={serverRunning}
             setServerRunning={setServerRunning}
             setActiveModel={setActiveModel}
