@@ -1883,10 +1883,10 @@ function ModelManager({
           )}
         </div>
       </div>
-      </div>
 
       {pendingLoadModel && (
         <div style={{ position: "fixed", inset: 0, zIndex: 50, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center", padding: "24px" }}>
+
           <div className="m3-card" style={{ maxWidth: "460px", width: "100%", margin: 0, border: "1px solid var(--md-sys-color-outline-variant)" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
               <AlertTriangle size={22} style={{ color: "var(--md-sys-color-error)" }} />
