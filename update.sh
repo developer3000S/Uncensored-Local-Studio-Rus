@@ -1,36 +1,36 @@
 #!/bin/bash
 
-# Скрипт для автоматического обновления репозитория на GitHub
-# Использование: ./update.sh "Ваш комментарий к коммиту"
+# Script for automatic GitHub repository update
+# Usage: ./update.sh "Your commit message"
 
-# Проверка на наличие комментария
+# Check for presence of commit message
 if [ -z "$1" ]; then
-    echo "Ошибка: Пожалуйста, укажите комментарий к коммиту."
-    echo "Пример: ./update.sh \"Исправлена ошибка в обработке логов\""
+    echo "Error: Please provide a commit message."
+    echo "Example: ./update.sh \"Fixed log processing error\""
     exit 1
 fi
 
 COMMIT_MSG="$1"
 
-echo "--- Начинаю обновление GitHub ---"
+echo "--- Starting GitHub update ---"
 
-# 1. Добавление всех изменений
-echo "[1/3] Добавление файлов..."
+# 1. Adding all changes
+echo "[1/3] Adding files..."
 git add .
 
-# 2. Создание коммита
-echo "[2/3] Создание коммита: '$COMMIT_MSG'..."
+# 2. Creating commit
+echo "[2/3] Creating commit: '$COMMIT_MSG'..."
 git commit -m "$COMMIT_MSG"
 
-# 3. Пуш в основную ветку (main)
-echo "[3/3] Отправка данных на GitHub (ветка main)..."
+# 3. Pushing to main branch
+echo "[3/3] Pushing data to GitHub (branch main)..."
 # Добавляем флаг --no-thin и предварительную очистку для стабильности на внешних дисках
 git gc --auto > /dev/null 2>&1
 git push origin main --no-thin
 
 if [ $? -eq 0 ]; then
-    echo "--- Успех: Репозиторий обновлен! ---"
+    echo "--- Success: Repository updated! ---"
 else
-    echo "--- Ошибка: Не удалось обновить репозиторий. ---"
+    echo "--- Error: Failed to update repository. ---"
     exit 1
 fi
