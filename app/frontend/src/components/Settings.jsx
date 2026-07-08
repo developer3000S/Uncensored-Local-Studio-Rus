@@ -675,7 +675,7 @@ function Settings({
     <>
       <SectionHeader 
         icon={Image} 
-        title="Image Generation" 
+        title="Генерация изображения" 
         count={4}
         color="#3b82f6"
         isExpanded={expandedSections.image}
@@ -691,12 +691,12 @@ function Settings({
           <div className="settings-subsection">
             <div className="settings-subsection-title">
               <Crop size={16} />
-              Size & Shape
+              Размер и форма
             </div>
             <div className="m3-field-group">
               <div className="m3-slider-group">
                 <div className="m3-slider-header">
-                  <span className="m3-slider-label">Resolution</span>
+                  <span className="m3-slider-label">Разрешение</span>
                   <span className="settings-value-badge">
                     {constraints.width >= 1024 ? "SDXL" : "SD 1.5"}
                   </span>
@@ -724,7 +724,7 @@ function Settings({
 
               <div className="m3-slider-group">
                 <div className="m3-slider-header">
-                  <span className="m3-slider-label">Aspect Ratio</span>
+                  <span className="m3-slider-label">Соотношение сторон</span>
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "8px" }}>
                   {ASPECT_RATIOS.map((ratio) => {
@@ -752,7 +752,7 @@ function Settings({
 
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
                 <div className="m3-text-field">
-                  <label className="m3-text-field-label">Width</label>
+                  <label className="m3-text-field-label">Ширина</label>
                   <input
                     type="number"
                     className="m3-input"
@@ -764,7 +764,7 @@ function Settings({
                   />
                 </div>
                 <div className="m3-text-field">
-                  <label className="m3-text-field-label">Height</label>
+                  <label className="m3-text-field-label">Высота</label>
                   <input
                     type="number"
                     className="m3-input"
@@ -783,12 +783,12 @@ function Settings({
           <div className="settings-subsection">
             <div className="settings-subsection-title">
               <Sliders size={16} />
-              Quality & Speed
+              Качество и скорость
             </div>
             <div className="m3-field-group">
               <div className="m3-slider-group">
                 <div className="m3-slider-header">
-                  <span className="m3-slider-label">Detail Steps</span>
+                  <span className="m3-slider-label">Шаги детализации</span>
                   <span className="settings-value-badge">{constraints.steps}</span>
                 </div>
                 <input
@@ -802,27 +802,27 @@ function Settings({
                 />
                 <span className="settings-option-desc">
                   {isOpenVinoNpu
-                    ? "LCM OpenVINO: 1-8 fast steps"
-                    : "More steps = sharper details, longer time"}
+                    ? "LCM OpenVINO: 1-8 быстрых шагов"
+                    : "Больше шагов = более четкие детали, больше времени"}
                 </span>
               </div>
 
               <div className="m3-text-field">
-                <label className="m3-text-field-label">Random Seed</label>
+                <label className="m3-text-field-label">Параметр Random Seed</label>
                 <div style={{ display: "flex", gap: "8px" }}>
                   <input
                     type="number"
                     className="m3-input"
                     value={constraints.seed}
                     onChange={(e) => updateConstraint("seed", parseInt(e.target.value) || -1)}
-                    placeholder="-1 for random"
+                    placeholder="-1 для случайного"
                     style={{ flex: 1 }}
                   />
                   <button
                     className="m3-btn m3-btn-tonal"
                     onClick={() => updateConstraint("seed", -1)}
                   >
-                    Random
+                    Случайный
                   </button>
                 </div>
               </div>
@@ -836,26 +836,26 @@ function Settings({
           <div className="settings-subsection">
             <div className="settings-subsection-title">
               <SlidersHorizontal size={16} />
-              Memory Optimizations
+              Оптимизация памяти
             </div>
             <div className="m3-field-group">
               <PremiumToggle
                 checked={constraints.vaeTiling}
                 onChange={(v) => updateConstraint("vaeTiling", v)}
-                label="VAE Tiling"
-                description="Process image in tiles to save VRAM"
+                label="Плиточное VAE"
+                description="Обрабатывает изображение по плитам, чтобы сэкономить VRAM"
               />
               <PremiumToggle
                 checked={constraints.vaeOnCpu}
                 onChange={(v) => updateConstraint("vaeOnCpu", v)}
-                label="VAE on CPU"
-                description="Run decoder on CPU if GPU OOM"
+                label="VAE на CPU"
+                description="Запуск декодера на CPU при недостатке памяти GPU"
               />
               <PremiumToggle
                 checked={constraints.useFlashAttn}
                 onChange={(v) => updateConstraint("useFlashAttn", v)}
                 label="Flash Attention"
-                description="Faster attention with less memory"
+                description="Более быстрая работа внимания с меньшим потреблением памяти"
               />
             </div>
           </div>
@@ -864,12 +864,12 @@ function Settings({
           <div className="settings-subsection">
             <div className="settings-subsection-title">
               <Monitor size={16} />
-              Backend & Acceleration
+              Бэкенд и ускорение
             </div>
             <div className="m3-field-group">
               <div className="m3-slider-group">
                 <div className="m3-slider-header">
-                  <span className="m3-slider-label">Accelerator</span>
+                  <span className="m3-slider-label">Акселератор</span>
                 </div>
                 <div className="m3-segmented-button" style={{ flexWrap: "wrap" }}>
                   {visibleBackends.map((b) => {
@@ -938,7 +938,7 @@ function Settings({
                             style={{ flexShrink: 0 }}
                           >
                             {isDownloading ? <RefreshCw className="progress-spinner" size={14} /> : <DownloadCloud size={14} />}
-                            <span>{isDownloading ? "Downloading" : "Download"}</span>
+                            <span>{isDownloading ? "Загрузка" : "Скачать"}</span>
                           </button>
                         </div>
                       );
@@ -960,7 +960,7 @@ function Settings({
     <>
       <SectionHeader 
         icon={Type} 
-        title="Text Generation" 
+        title="Генерация текста" 
         count={5}
         color="#8b5cf6"
         isExpanded={expandedSections.text}
@@ -976,27 +976,27 @@ function Settings({
           <div className="settings-subsection">
             <div className="settings-subsection-title">
               <MessageSquare size={16} />
-              Model & Context
+              Модель и контекст
             </div>
             <div className="m3-field-group">
               <div className="m3-text-field">
-                <label className="m3-text-field-label">System Prompt</label>
+                <label className="m3-text-field-label">Системный промпт</label>
                 <textarea
                    className="m3-input"
                    value={pendingTextSettings.systemPrompt || ""}
                    onChange={(e) => updateTextSetting("systemPrompt", e.target.value)}
-                   placeholder="Enter system prompt..."
+                   placeholder="Введите системный промпт..."
                    rows={3}
                    style={{ resize: "vertical", minHeight: "60px" }}
                 />
                 <span className="settings-option-desc" style={{ marginTop: "4px", display: "block" }}>
-                  Defines assistant personality/instructions. (Recommended: Default)
+                  Определяет личность/инструкции ассистента. (Рекомендуется: По умолчанию)
                 </span>
               </div>
 
               <div className="m3-slider-group">
                 <div className="m3-slider-header">
-                  <span className="m3-slider-label">Context Size</span>
+                  <span className="m3-slider-label">Размер контекста</span>
                   <span className="settings-value-badge">{pendingTextSettings.contextSize || 0}</span>
                 </div>
                 <input
@@ -1010,7 +1010,7 @@ function Settings({
                   style={getSliderStyle(pendingTextSettings.contextSize || 0, 0, 32768)}
                 />
                 <span className="settings-option-desc">
-                  Model memory limit. 0 uses default limit. (Recommended: 0)
+                  Ограничение памяти модели. 0 использует значение по умолчанию. (Рекомендуется: 0)
                 </span>
               </div>
             </div>
@@ -1020,12 +1020,12 @@ function Settings({
           <div className="settings-subsection">
             <div className="settings-subsection-title">
               <Settings2 size={16} />
-              Generation Parameters
+              Параметры генерации
             </div>
             <div className="m3-field-group">
               <div className="m3-slider-group">
                 <div className="m3-slider-header">
-                  <span className="m3-slider-label">Temperature</span>
+                  <span className="m3-slider-label">Температура</span>
                   <span className="settings-value-badge">{pendingTextSettings.temperature}</span>
                 </div>
                 <input
@@ -1039,22 +1039,22 @@ function Settings({
                   style={getSliderStyle(pendingTextSettings.temperature, 0, 2)}
                 />
                 <span className="settings-option-desc">
-                  Controls creativity. Lower = focused & factual, Higher = creative & diverse. (Recommended: 0.7)
+                  Контролирует креативность. Меньше = точнее и фактическое, Больше = креативнее и разнообразнее. (Рекомендуется: 0.7)
                 </span>
               </div>
 
 
               <div className="m3-slider-group">
                 <div className="m3-slider-header">
-                  <span className="m3-slider-label">Max Response Tokens</span>
+                  <span className="m3-slider-label">Максимум токенов ответа</span>
                   <span className="settings-value-badge">
-                    {(pendingTextSettings.responseTokenMode || "auto") === "auto" ? "Auto" : (pendingTextSettings.maxTokens || 1024)}
+                    {(pendingTextSettings.responseTokenMode || "auto") === "auto" ? "Авто" : (pendingTextSettings.maxTokens || 1024)}
                   </span>
                 </div>
                 <div className="m3-segmented-button" style={{ marginBottom: "10px" }}>
                   {[
-                    { id: "auto", label: "Auto" },
-                    { id: "manual", label: "Manual" },
+                    { id: "auto", label: "Авто" },
+                    { id: "manual", label: "Ручной" },
                   ].map((mode) => (
                     <button
                       key={mode.id}
@@ -1078,18 +1078,18 @@ function Settings({
                       style={getSliderStyle(pendingTextSettings.maxTokens || 1024, 64, 4096)}
                     />
                     <span className="settings-option-desc">
-                      Manual uses the slider value.
+                      Ручной режим использует значение с ползунка.
                     </span>
                   </>
                 ) : (
                   <span className="settings-option-desc">
-                    Auto adjusts length dynamically based on context window. (Recommended)
+                    Авто автоматически настраивает длину на основе окна контекста. (Рекомендуется)
                   </span>
                 )}
               </div>
 
               <div className="m3-text-field">
-                <label className="m3-text-field-label">Seed</label>
+                <label className="m3-text-field-label">Сид</label>
                 <input
                   type="number"
                   className="m3-input"
@@ -1098,7 +1098,7 @@ function Settings({
                   placeholder="-1"
                 />
                 <span className="settings-option-desc" style={{ marginTop: "4px", display: "block" }}>
-                  Controls repeatability. Use -1 for random, positive integer for identical replies. (Recommended: -1)
+                  Контролирует повторяемость. Используйте -1 для случайного, положительное целое для одинаковых ответов. (Рекомендуется: -1)
                 </span>
               </div>
             </div>
@@ -1111,23 +1111,31 @@ function Settings({
           <div className="settings-subsection">
             <div className="settings-subsection-title">
               <Gauge size={16} />
-              Performance Profile
+              Профиль производительности
             </div>
             <div className="m3-field-group">
               <div className="m3-slider-group">
                 <div className="m3-slider-header">
-                  <span className="m3-slider-label">Profile</span>
+                  <span className="m3-slider-label">Профиль</span>
                 </div>
                 <div className="m3-segmented-button">
-                  {["potato", "balanced", "high", "custom"].map((profile) => (
-                    <button
-                      key={profile}
-                      className={`m3-segment-item ${(pendingTextSettings.performanceProfile || "balanced") === profile ? "active" : ""}`}
-                      onClick={() => updateTextSetting("performanceProfile", profile)}
-                    >
-                      {profile.charAt(0).toUpperCase() + profile.slice(1)}
-                    </button>
-                  ))}
+                  {["potato", "balanced", "high", "custom"].map((profile) => {
+                    const profileLabels = {
+                      potato: "Низкий",
+                      balanced: "Сбалансированный",
+                      high: "Высокий",
+                      custom: "Пользовательский",
+                    };
+                    return (
+                      <button
+                        key={profile}
+                        className={`m3-segment-item ${(pendingTextSettings.performanceProfile || "balanced") === profile ? "active" : ""}`}
+                        onClick={() => updateTextSetting("performanceProfile", profile)}
+                      >
+                        {profileLabels[profile]}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -1136,7 +1144,7 @@ function Settings({
               {llmBackends.available?.length > 1 && (
                 <div className="m3-slider-group">
                   <div className="m3-slider-header">
-                    <span className="m3-slider-label">Text Backend</span>
+                    <span className="m3-slider-label">Текстовый бэкенд</span>
                   </div>
                   <div className="m3-segmented-button">
                     {llmBackends.available.map((backend) => (
@@ -1145,7 +1153,7 @@ function Settings({
                         className={`m3-segment-item ${(pendingTextSettings.preferredBackend || "auto") === backend.key ? "active" : ""}`}
                         onClick={() => updateTextSetting("preferredBackend", backend.key)}
                       >
-                        {backend.key === "cpu" ? "CPU Only" : backend.key.toUpperCase()}
+                        {backend.key === "cpu" ? "Только CPU" : backend.key.toUpperCase()}
                       </button>
                     ))}
                   </div>
@@ -1154,7 +1162,7 @@ function Settings({
 
               <div className="m3-slider-group">
                 <div className="m3-slider-header">
-                  <span className="m3-slider-label">CPU Threads</span>
+                  <span className="m3-slider-label">Потоки CPU</span>
                   <span className="settings-value-badge">{pendingTextSettings.threads || 4}</span>
                 </div>
                 <input
@@ -1170,8 +1178,8 @@ function Settings({
 
               <div className="m3-slider-group">
                 <div className="m3-slider-header">
-                  <span className="m3-slider-label">GPU Layers</span>
-                  <span className="settings-value-badge">{pendingTextSettings.gpuLayers === -1 ? "All" : pendingTextSettings.gpuLayers}</span>
+                  <span className="m3-slider-label">Слои GPU</span>
+                  <span className="settings-value-badge">{pendingTextSettings.gpuLayers === -1 ? "Все" : pendingTextSettings.gpuLayers}</span>
                 </div>
                 <input
                   type="range"
@@ -1186,13 +1194,13 @@ function Settings({
                   style={getSliderStyle(pendingTextSettings.gpuLayers === -1 ? 50 : pendingTextSettings.gpuLayers, 0, 50)}
                 />
                 <span className="settings-option-desc">
-                  50 = All layers on GPU
+                  50 = Все слои на GPU
                 </span>
               </div>
 
               <div className="m3-slider-group">
                 <div className="m3-slider-header">
-                  <span className="m3-slider-label">Batch Size</span>
+                  <span className="m3-slider-label">Размер батча</span>
                   <span className="settings-value-badge">{pendingTextSettings.batchSize || 512}</span>
                 </div>
                 <input
@@ -1209,7 +1217,7 @@ function Settings({
 
               <div className="m3-slider-group">
                 <div className="m3-slider-header">
-                  <span className="m3-slider-label">KV Cache</span>
+                  <span className="m3-slider-label">KV кэш</span>
                 </div>
                 <div className="m3-segmented-button">
                   {["q4_0", "q8_0", "f16"].map((type) => (
@@ -1246,11 +1254,11 @@ function Settings({
                   <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                     <Brain size={18} style={{ color: "var(--md-sys-color-primary)" }} />
                     <div>
-                      <div style={{ fontWeight: 600, fontSize: "0.9rem" }}>Unsaved Text Generation Settings</div>
+                      <div style={{ fontWeight: 600, fontSize: "0.9rem" }}>Несохранённые настройки генерации текста</div>
                       <div style={{ fontSize: "0.85rem", opacity: 0.8, marginTop: "2px" }}>
                         {llmStatus.ready
-                          ? "Saving will unload the active text model to apply changes."
-                          : "Changes will be applied on the next model load."}
+                          ? "Сохранение выгрузит активную текстовую модель, чтобы применить изменения."
+                          : "Изменения будут применены при следующей загрузке модели."}
                       </div>
                     </div>
                   </div>
@@ -1269,7 +1277,7 @@ function Settings({
                       boxShadow: "0 2px 8px color-mix(in srgb, var(--md-sys-color-primary) 30%, transparent)",
                     }}
                   >
-                    Save & Apply Changes
+                    Сохранить и применить
                   </button>
                 </div>
               )}
@@ -1287,24 +1295,24 @@ function Settings({
   // ─── Speech Settings ───
   const renderSpeechSettings = () => {
     const SPEECH_LANGUAGES = [
-      { value: "auto", label: "Auto detect" },
-      { value: "en", label: "English" },
-      { value: "es", label: "Spanish" },
-      { value: "fr", label: "French" },
-      { value: "de", label: "German" },
-      { value: "it", label: "Italian" },
-      { value: "pt", label: "Portuguese" },
-      { value: "hi", label: "Hindi" },
-      { value: "ja", label: "Japanese" },
-      { value: "ko", label: "Korean" },
-      { value: "zh", label: "Chinese" },
+      { value: "auto", label: "Авто определение" },
+      { value: "en", label: "Английский" },
+      { value: "es", label: "Испанский" },
+      { value: "fr", label: "Французский" },
+      { value: "de", label: "Немецкий" },
+      { value: "it", label: "Итальянский" },
+      { value: "pt", label: "Португальский" },
+      { value: "hi", label: "Хинди" },
+      { value: "ja", label: "Японский" },
+      { value: "ko", label: "Корейский" },
+      { value: "zh", label: "Китайский" },
     ];
 
     return (
       <>
         <SectionHeader 
           icon={Volume2} 
-          title="Speech Transcription" 
+          title="Транскрибирование речи" 
           count={4}
           color="#10b981"
           isExpanded={expandedSections.speech}
@@ -1320,28 +1328,28 @@ function Settings({
                 <div className="settings-subsection">
                   <div className="settings-subsection-title">
                     <Volume2 size={16} />
-                    Transcription Settings
+                    Настройки транскрипции
                   </div>
                   <div className="m3-field-group">
                     <div className="m3-text-field">
-                      <label className="m3-text-field-label">Default Backend</label>
+                      <label className="m3-text-field-label">Бэкенд по умолчанию</label>
                       <select
                         className="m3-input"
                         value={speechSettings.backendPreference || "auto"}
                         onChange={(e) => updateSpeechSetting("backendPreference", e.target.value)}
                       >
-                        <option value="auto">Auto - GPU if installed</option>
+                        <option value="auto">Авто - GPU если установлен</option>
                         <option value="vulkan">Vulkan GPU</option>
                         <option value="metal">Metal GPU</option>
                         <option value="cpu">CPU</option>
                       </select>
                       <span className="settings-option-desc" style={{ marginTop: "4px", display: "block" }}>
-                        Auto uses a GPU whisper.cpp backend when its binary exists, then falls back to CPU.
+                        Авто использует GPU бэкенд whisper.cpp, если его бинарник найден, затем переключается на CPU.
                       </span>
                     </div>
 
                     <div className="m3-text-field">
-                      <label className="m3-text-field-label">Default Language</label>
+                      <label className="m3-text-field-label">Язык по умолчанию</label>
                       <select 
                         className="m3-input" 
                         value={speechSettings.language || "auto"} 
@@ -1354,13 +1362,13 @@ function Settings({
                         ))}
                       </select>
                       <span className="settings-option-desc" style={{ marginTop: "4px", display: "block" }}>
-                        Default language for transcribing audio. (Recommended: Auto detect)
+                        Язык по умолчанию для расшифровки аудио. (Рекомендуется: Авто)
                       </span>
                     </div>
 
                     <div className="m3-slider-group">
                       <div className="m3-slider-header">
-                        <span className="m3-slider-label">CPU Threads</span>
+                        <span className="m3-slider-label">Потоки CPU</span>
                         <span className="settings-value-badge">{speechSettings.threads || 4}</span>
                       </div>
                       <input
@@ -1373,7 +1381,7 @@ function Settings({
                         style={getSliderStyle(speechSettings.threads || 4, 1, specs?.cpu_cores_logical || 16)}
                       />
                       <span className="settings-option-desc">
-                        Number of threads to allocate for transcription. (Recommended: 4)
+                        Количество потоков для расшифровки. (Рекомендуется: 4)
                       </span>
                     </div>
                   </div>
@@ -1386,14 +1394,14 @@ function Settings({
                 <div className="settings-subsection">
                   <div className="settings-subsection-title">
                     <Sparkles size={16} />
-                    Translation Settings
+                    Настройки перевода
                   </div>
                   <div className="m3-field-group">
                     <PremiumToggle
                       checked={speechSettings.translate === true}
                       onChange={(val) => updateSpeechSetting("translate", val)}
-                      label="Translate to English"
-                      description="Auto-translate foreign languages to English during transcription"
+                      label="Перевод на английский"
+                      description="Автоматически переводить иностранные языки на английский во время расшифровки"
                     />
                   </div>
                 </div>
@@ -1422,7 +1430,7 @@ function Settings({
       <>
         <SectionHeader
           icon={Volume2}
-          title="Text to Speech"
+          title="Текст в речь"
           count={2}
           color="#8b5cf6"
           isExpanded={expandedSections.tts}
@@ -1436,11 +1444,11 @@ function Settings({
                 <div className="settings-subsection">
                   <div className="settings-subsection-title">
                     <Volume2 size={16} />
-                    Voice Defaults
+                    Голос по умолчанию
                   </div>
                   <div className="m3-field-group">
                     <div className="m3-text-field">
-                      <label className="m3-text-field-label">Default Voice</label>
+                      <label className="m3-text-field-label">Голос по умолчанию</label>
                       <select
                         className="m3-input"
                         value={ttsSettings?.voice || "af_heart"}
@@ -1453,7 +1461,7 @@ function Settings({
                         ))}
                       </select>
                       <span className="settings-option-desc" style={{ marginTop: "4px", display: "block" }}>
-                        Default Kokoro voice for generated WAV files.
+                        Голос Kokoro по умолчанию для сгенерированных WAV-файлов.
                       </span>
                     </div>
                   </div>
@@ -1464,11 +1472,11 @@ function Settings({
                 <div className="settings-subsection">
                   <div className="settings-subsection-title">
                     <Gauge size={16} />
-                    Speech Timing
+                    Параметры речи
                   </div>
                   <div className="m3-slider-group">
                     <div className="m3-slider-header">
-                      <span className="m3-slider-label">Speed</span>
+                      <span className="m3-slider-label">Скорость</span>
                       <span className="settings-value-badge">{(ttsSettings?.speed || 1).toFixed(2)}x</span>
                     </div>
                     <input
@@ -1482,7 +1490,7 @@ function Settings({
                       style={getSliderStyle(ttsSettings?.speed || 1, 0.5, 2)}
                     />
                     <span className="settings-option-desc">
-                      1.00x is natural speed. Lower values are slower, higher values are faster.
+                      1.00x — естественная скорость. Меньше = медленнее, больше = быстрее.
                     </span>
                   </div>
                 </div>
@@ -1498,7 +1506,7 @@ function Settings({
     <>
       <SectionHeader 
         icon={Palette} 
-        title="Appearance & Themes" 
+        title="Внешний вид и темы" 
         count={2}
         color="var(--md-sys-color-primary)"
         isExpanded={expandedSections.appearance}
@@ -1511,7 +1519,7 @@ function Settings({
             {/* Color Themes Sub-section */}
             <div className="settings-subsection-title">
               <Palette size={16} />
-              Color Themes
+              Тематические цвета
             </div>
             <div style={{
               display: "grid",
@@ -1563,9 +1571,9 @@ function Settings({
                     
                     {/* Preview circles for primary and secondary colors */}
                     <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                      <div style={{ width: "26px", height: "26px", borderRadius: "50%", background: t.primary, border: "2px solid rgba(255,255,255,0.25)", boxShadow: "0 2px 6px rgba(0,0,0,0.15)" }} title="Primary" />
-                      <div style={{ width: "26px", height: "26px", borderRadius: "50%", background: t.secondary, border: "2px solid rgba(255,255,255,0.25)", boxShadow: "0 2px 6px rgba(0,0,0,0.15)" }} title="Secondary" />
-                      <div style={{ width: "26px", height: "26px", borderRadius: "50%", background: t.bg, border: "1.5px solid rgba(0,0,0,0.12)", boxShadow: "inset 0 2px 4px rgba(0,0,0,0.06)" }} title="Background" />
+                      <div style={{ width: "26px", height: "26px", borderRadius: "50%", background: t.primary, border: "2px solid rgba(255,255,255,0.25)", boxShadow: "0 2px 6px rgba(0,0,0,0.15)" }} title="Основной цвет" />
+                      <div style={{ width: "26px", height: "26px", borderRadius: "50%", background: t.secondary, border: "2px solid rgba(255,255,255,0.25)", boxShadow: "0 2px 6px rgba(0,0,0,0.15)" }} title="Дополнительный цвет" />
+                      <div style={{ width: "26px", height: "26px", borderRadius: "50%", background: t.bg, border: "1.5px solid rgba(0,0,0,0.12)", boxShadow: "inset 0 2px 4px rgba(0,0,0,0.06)" }} title="Фон" />
                       <span style={{ marginLeft: "auto", fontSize: "0.7rem", opacity: 0.6, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em" }}>
                         {t.type}
                       </span>
@@ -1585,11 +1593,11 @@ function Settings({
             {/* Text & Interface Size Sub-section */}
             <div className="settings-subsection-title">
               <Type size={16} />
-              Text & Interface Size
+              Размер текста и интерфейса
             </div>
             <div className="m3-slider-group" style={{ maxWidth: "480px", marginTop: "14px" }}>
               <div className="m3-slider-header">
-                <span className="m3-slider-label">Font Size</span>
+                <span className="m3-slider-label">Размер шрифта</span>
                 <span className="settings-value-badge">{fontSize || 16}px</span>
               </div>
               <input
@@ -1603,7 +1611,7 @@ function Settings({
                 style={getSliderStyle(fontSize || 16, 12, 24)}
               />
               <span className="settings-option-desc">
-                Adjusts the global font size of the application text, including chat replies and settings labels. Default is 16px.
+                Настраивает глобальный размер шрифта приложения, включая ответы чата и подписи настроек. По умолчанию 16px.
               </span>
             </div>
           </div>
@@ -1616,9 +1624,9 @@ function Settings({
     <div className="workspace-area">
       {/* Page Header */}
       <div className="workspace-title-section">
-        <h2 className="workspace-title">Settings & Parameters</h2>
+        <h2 className="workspace-title">Настройки и параметры</h2>
         <p className="workspace-subtitle">
-          Configure your AI models for optimal performance.
+          Настройте ИИ модели для оптимальной работы.
         </p>
       </div>
 
