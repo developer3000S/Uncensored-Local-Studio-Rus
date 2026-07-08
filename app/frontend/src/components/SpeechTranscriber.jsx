@@ -362,27 +362,27 @@ export default function SpeechTranscriber({
   return (
     <div className="workspace-area speech-workspace">
       <div className="workspace-title-section">
-        <h2 className="workspace-title">Speech Transcriber</h2>
+        <h2 className="workspace-title">Распознавание речи</h2>
         <p className="workspace-subtitle">
-          Record microphone audio or upload a WAV file, then transcribe locally with whisper.cpp.
+          Запишите звук с микрофона или загрузите WAV, затем расшифруйте локально с помощью whisper.cpp.
         </p>
       </div>
 
       <div className="speech-grid">
         <section className="m3-card speech-panel">
           <div className="speech-panel-header">
-            <h3>Runtime</h3>
+            <h3>Выполнение</h3>
             <span className={`status-chip ${status.backendInstalled ? "" : "offline"}`}>
-              {status.backendInstalled ? (status.ready ? "Ready" : "Installed") : "Backend missing"}
+              {status.backendInstalled ? (status.ready ? "Готово" : "Установлено") : "Бэкенд отсутствует"}
             </span>
           </div>
 
           {status.error && <div className="text-progress error">{status.error}</div>}
 
           <label className="speech-label">
-            Whisper model
+            Модель Whisper
             <select className="m3-input" value={selectedModel} onChange={(event) => setSelectedModel(event.target.value)}>
-              {installedModels.length === 0 && <option value="">No downloaded speech models</option>}
+              {installedModels.length === 0 && <option value="">Нет загруженных моделей речи</option>}
               {installedModels.map((model) => (
                 <option key={model.id || model.filename} value={model.filename}>
                   {model.name || model.filename}
@@ -393,9 +393,9 @@ export default function SpeechTranscriber({
 
           <div className="speech-controls-row">
             <label className="speech-label">
-              Backend
+              Бэкенд
               <select className="m3-input" value={backendPreference} onChange={(event) => setBackendPreference(event.target.value)}>
-                <option value="auto">Auto (GPU if installed)</option>
+                <option value="auto">Авто (GPU, если установлен)</option>
                 {(status.backends || []).map((backend) => (
                   <option key={backend.key} value={backend.key}>
                     {backend.label}{backend.installed ? " - installed" : " - missing"}
@@ -404,13 +404,13 @@ export default function SpeechTranscriber({
               </select>
             </label>
             <label className="speech-label">
-              Language
+              Язык
               <select className="m3-input" value={language} onChange={(event) => setLanguage(event.target.value)}>
                 {LANGUAGE_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
               </select>
             </label>
             <label className="speech-label">
-              Threads
+              Потоки
               <input
                 className="m3-input"
                 type="number"
@@ -429,7 +429,7 @@ export default function SpeechTranscriber({
                 onChange={(event) => setSpeechSettings((prev) => ({ ...prev, translate: event.target.checked }))}
                 style={{ cursor: "pointer", width: "15px", height: "15px" }}
               />
-              <span>Translate to English</span>
+              <span>Перевод на английский</span>
             </label>
           </div>
 
@@ -440,32 +440,32 @@ export default function SpeechTranscriber({
               disabled={!selectedModel || isLoadingModel || isTranscribing || isSelectedRuntimeLoaded}
             >
               {isLoadingModel ? <LoaderCircle className="progress-spinner" size={14} /> : <Play size={14} />}
-              <span>{isSelectedRuntimeLoaded ? "Loaded" : isLoadingModel ? "Loading" : "Load"}</span>
+              <span>{isSelectedRuntimeLoaded ? "Загружено" : isLoadingModel ? "Загрузка" : "Загрузить"}</span>
             </button>
             <button className="m3-btn m3-btn-outlined" onClick={refresh}>
               <Play size={14} />
-              <span>Refresh</span>
+              <span>Обновить</span>
             </button>
           </div>
 
           {installedModels.length === 0 && (
             <div className="text-progress">
-              Download a Whisper model from Model Manager, Speech Models first.
+              Сначала загрузите модель Whisper через Менеджер моделей, раздел Speech Models.
             </div>
           )}
         </section>
 
         <section className="m3-card speech-panel">
           <div className="speech-panel-header">
-            <h3>Audio</h3>
-            <span className="status-chip">{audioName || "No audio selected"}</span>
+            <h3>Аудио</h3>
+            <span className="status-chip">{audioName || "Аудио не выбрано"}</span>
           </div>
 
           <div className="speech-capture-zone">
             <FileAudio size={42} />
             <div>
-              <strong>{audioName || "Record or upload WAV"}</strong>
-              <p>Microphone recordings are converted to 16 kHz mono PCM16 WAV before transcription.</p>
+              <strong>{audioName || "Запишите или загрузите WAV"}</strong>
+              <p>Записи с микрофона конвертируются в 16 кГц моно PCM16 WAV перед расшифровкой.</p>
             </div>
           </div>
 
@@ -475,23 +475,23 @@ export default function SpeechTranscriber({
             {isRecording ? (
               <button className="m3-btn m3-btn-error" onClick={stopRecording}>
                 <Square size={14} />
-                <span>Stop Recording</span>
+                <span>Остановить запись</span>
               </button>
             ) : (
               <button className="m3-btn m3-btn-filled" onClick={startRecording} disabled={isTranscribing}>
                 <Mic size={14} />
-                <span>Record</span>
+                <span>Запись</span>
               </button>
             )}
             <label className="m3-btn m3-btn-outlined">
               <Upload size={14} />
-              <span>Upload WAV</span>
+              <span>Загрузить WAV</span>
               <input type="file" accept=".wav,audio/wav" onChange={handleUploadAudio} hidden />
             </label>
             {audioBlob && (
               <button className="m3-btn m3-btn-error" onClick={clearCurrentAudio} disabled={isTranscribing || isRecording}>
                 <X size={14} />
-                <span>Remove Audio</span>
+                <span>Удалить аудио</span>
               </button>
             )}
           </div>
@@ -500,7 +500,7 @@ export default function SpeechTranscriber({
             {isTranscribing ? (
               <button className="m3-btn m3-btn-error" onClick={handleCancel}>
                 <Square size={14} />
-                <span>Cancel</span>
+                <span>Отменить</span>
               </button>
             ) : (
               <button
@@ -509,17 +509,17 @@ export default function SpeechTranscriber({
                 disabled={!audioBlob || !selectedModel || !status.backendInstalled}
               >
                 <Mic size={14} />
-                <span>Transcribe</span>
+                <span>Расшифровать</span>
               </button>
             )}
-            {isTranscribing && <span className="text-progress"><LoaderCircle className="progress-spinner" size={14} /> Transcribing locally...</span>}
+            {isTranscribing && <span className="text-progress"><LoaderCircle className="progress-spinner" size={14} /> Расшифровка...</span>}
           </div>
         </section>
       </div>
 
       <section className="m3-card speech-result-panel">
         <div className="speech-panel-header">
-          <h3>Transcript</h3>
+          <h3>Расшифровка</h3>
           <div className="speech-button-row">
             <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "0.78rem", cursor: "pointer", userSelect: "none", color: "var(--md-sys-color-on-surface-variant)", marginRight: "12px" }}>
               <input
@@ -528,7 +528,7 @@ export default function SpeechTranscriber({
                 onChange={(e) => setShowTimestamps(e.target.checked)}
                 style={{ width: "14px", height: "14px", cursor: "pointer" }}
               />
-              <span>Show Timestamps</span>
+              <span>Показывать метки времени</span>
             </label>
             <button className="m3-btn m3-btn-outlined" onClick={saveText} disabled={!resultText.trim()}>
               <Save size={14} />
@@ -550,7 +550,7 @@ export default function SpeechTranscriber({
           className="m3-textarea speech-result-textarea"
           value={resultText}
           onChange={(event) => setResultText(event.target.value)}
-          placeholder="Transcript output will appear here."
+          placeholder="Здесь появится расшифровка."
         />
       </section>
     </div>

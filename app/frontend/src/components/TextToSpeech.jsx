@@ -164,27 +164,27 @@ export default function TextToSpeech({
   return (
     <div className="workspace-area speech-workspace">
       <div className="workspace-title-section">
-        <h2 className="workspace-title">Text to Speech</h2>
+        <h2 className="workspace-title">Текст в речь</h2>
         <p className="workspace-subtitle">
-          Generate local WAV narration with Kokoro ONNX.
+          Генерируйте локальный WAV с помощью Kokoro ONNX.
         </p>
       </div>
 
       <div className="speech-grid">
         <section className="m3-card speech-panel">
           <div className="speech-panel-header">
-            <h3>Runtime</h3>
+            <h3>Выполнение</h3>
             <span className={`status-chip ${status.runtimeInstalled ? "" : "offline"}`}>
-              {status.runtimeInstalled ? (status.ready ? "Ready" : "Installed") : "Runtime missing"}
+              {status.runtimeInstalled ? (status.ready ? "Готово" : "Установлено") : "Среда отсутствует"}
             </span>
           </div>
 
           {status.error && <div className="text-progress error">{status.error}</div>}
 
           <label className="speech-label">
-            Kokoro model
+            Модель Kokoro
             <select className="m3-input" value={selectedModel} onChange={(event) => setSelectedModel(event.target.value)}>
-              {installedModels.length === 0 && <option value="">No downloaded TTS models</option>}
+              {installedModels.length === 0 && <option value="">Нет загруженных моделей TTS</option>}
               {installedModels.map((model) => (
                 <option key={model.id || model.filename} value={model.filename}>
                   {model.name || model.filename}
@@ -195,7 +195,7 @@ export default function TextToSpeech({
 
           <div className="speech-controls-row">
             <label className="speech-label">
-              Voice
+              Голос
               <select className="m3-input" value={selectedVoice} onChange={(event) => updateTtsSetting("voice", event.target.value)}>
                 {voices.map((voice) => (
                   <option key={voice.id} value={voice.id}>
@@ -205,7 +205,7 @@ export default function TextToSpeech({
               </select>
             </label>
             <label className="speech-label">
-              Speed
+              Скорость
               <input
                 className="m3-input"
                 type="number"
@@ -225,30 +225,30 @@ export default function TextToSpeech({
               disabled={!selectedModel || isLoadingModel || isGenerating || isLoaded}
             >
               {isLoadingModel ? <LoaderCircle className="progress-spinner" size={14} /> : <Play size={14} />}
-              <span>{isLoaded ? "Loaded" : isLoadingModel ? "Loading" : "Load"}</span>
+              <span>{isLoaded ? "Загружено" : isLoadingModel ? "Загрузка" : "Загрузить"}</span>
             </button>
             <button className="m3-btn m3-btn-outlined" onClick={refresh}>
               <RefreshCw size={14} />
-              <span>Refresh</span>
+              <span>Обновить</span>
             </button>
             {status.ready && (
               <button className="m3-btn m3-btn-error" onClick={handleStop}>
                 <Square size={14} />
-                <span>Stop Runtime</span>
+                <span>Остановить среду</span>
               </button>
             )}
           </div>
 
           {installedModels.length === 0 && (
             <div className="text-progress">
-              Download a Kokoro model from Model Manager, TTS Models first.
+              Сначала загрузите модель Kokoro в Менеджере моделей, раздел TTS Models.
             </div>
           )}
         </section>
 
         <section className="m3-card speech-panel">
           <div className="speech-panel-header">
-            <h3>Input</h3>
+            <h3>Ввод</h3>
             <span className="status-chip">{text.trim().length} chars</span>
           </div>
           <textarea
@@ -258,13 +258,13 @@ export default function TextToSpeech({
             rows={10}
             maxLength={5000}
             style={{ width: "100%", resize: "vertical", minHeight: "220px", lineHeight: 1.45 }}
-            placeholder="Type text to turn into speech..."
+            placeholder="Введите текст для генерации речи..."
           />
           <div className="speech-button-row">
             {isGenerating ? (
               <button className="m3-btn m3-btn-error" onClick={handleCancel}>
                 <Square size={14} />
-                <span>Cancel</span>
+                <span>Отменить</span>
               </button>
             ) : (
               <button
@@ -273,17 +273,17 @@ export default function TextToSpeech({
                 disabled={!text.trim() || !selectedModel || !status.runtimeInstalled}
               >
                 <Volume2 size={14} />
-                <span>Generate WAV</span>
+                <span>Сгенерировать WAV</span>
               </button>
             )}
-            {isGenerating && <span className="text-progress"><LoaderCircle className="progress-spinner" size={14} /> Generating locally...</span>}
+            {isGenerating && <span className="text-progress"><LoaderCircle className="progress-spinner" size={14} /> Генерация...</span>}
           </div>
         </section>
       </div>
 
       <section className="m3-card speech-result-panel">
         <div className="speech-panel-header">
-          <h3>Output</h3>
+          <h3>Выход</h3>
           <div className="speech-button-row">
             <button className="m3-btn m3-btn-outlined" onClick={() => output?.url && downloadUrl(output.url, output.audioFile || "tts.wav")} disabled={!output?.url}>
               <Save size={14} />
@@ -308,7 +308,7 @@ export default function TextToSpeech({
         ) : (
           <div className="empty-state" style={{ padding: "32px 0" }}>
             <Volume2 size={42} />
-            <p>Generated speech will appear here.</p>
+            <p>Сгенерированная речь появится здесь.</p>
           </div>
         )}
       </section>

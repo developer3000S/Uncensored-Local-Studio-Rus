@@ -39,9 +39,8 @@ function Sidebar({
         {/* Sidebar Header */}
         <div className="sidebar-logo">
           <Shield className="sidebar-logo-icon" />
-          <span className="sidebar-logo-text">Local AI Studio</span>
+          <span className="sidebar-logo-text">Локальная AI Студия</span>
         </div>
-
         {/* Sidebar Navigation Links (Material 3 style) */}
         <div className="nav-list">
           <div
@@ -49,7 +48,7 @@ function Sidebar({
             onClick={() => setActiveTab("generator")}
           >
             <Image size={20} />
-            <span>Image Generator</span>
+            <span>Генератор изображений</span>
           </div>
 
           <div className="nav-item-wrapper" style={{ display: "flex", flexDirection: "column" }}>
@@ -60,7 +59,7 @@ function Sidebar({
             >
               <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
                 <MessageSquare size={20} />
-                <span>Text Chat</span>
+                <span>Текстовый чат</span>
               </div>
               <button
                 onClick={(e) => {
@@ -80,7 +79,7 @@ function Sidebar({
                   transition: "background-color 0.2s"
                 }}
                 className="history-toggle-arrow"
-                title={showHistory ? "Hide Chat History" : "Show Chat History"}
+                title={showHistory ? "Скрыть историю чата" : "Показать историю чата"}
               >
                 {showHistory ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
               </button>
@@ -104,7 +103,7 @@ function Sidebar({
               >
                 {conversations.length === 0 ? (
                   <div style={{ padding: "8px 12px", fontSize: "0.78rem", color: "var(--md-sys-color-outline)", opacity: 0.8 }}>
-                    No saved chats
+                    Нет сохранённых чатов
                   </div>
                 ) : (
                   conversations.map((conv) => {
@@ -177,7 +176,7 @@ function Sidebar({
             >
               <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
                 <Mic size={20} />
-                <span>Speech Transcriber</span>
+                <span>Распознавание речи</span>
               </div>
               <button
                 onClick={(e) => {
@@ -298,7 +297,7 @@ function Sidebar({
             >
               <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
                 <Volume2 size={20} />
-                <span>Text to Speech</span>
+                <span>Текст в речь</span>
               </div>
               <button
                 onClick={(e) => {

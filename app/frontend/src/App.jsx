@@ -21,14 +21,14 @@ function App() {
     if (resolver) resolver(value);
   }, []);
 
-  const showConfirm = useCallback(({ title = "Confirm Action", message, confirmLabel = "OK", cancelLabel = "Cancel", danger = false }) => {
+  const showConfirm = useCallback(({ title = "Подтвердите действие", message, confirmLabel = "ОК", cancelLabel = "Отмена", danger = false }) => {
     return new Promise((resolve) => {
       dialogResolverRef.current = resolve;
       setDialog({ type: "confirm", title, message, confirmLabel, cancelLabel, danger });
     });
   }, []);
 
-  const showAlert = useCallback(({ title = "Notice", message, confirmLabel = "OK", danger = false }) => {
+  const showAlert = useCallback(({ title = "Уведомление", message, confirmLabel = "ОК", danger = false }) => {
     return new Promise((resolve) => {
       dialogResolverRef.current = resolve;
       setDialog({ type: "alert", title, message, confirmLabel, danger });
@@ -712,8 +712,8 @@ function App() {
       setServerRunning(false);
       setActiveModel(null);
     } catch (err) {
-      console.error("Failed to stop server:", err);
-      showAlert({ title: "Stop Server Failed", message: err.message || String(err), danger: true });
+      console.error("Не удалось остановить сервер:", err);
+      showAlert({ title: "Ошибка остановки сервера", message: err.message || String(err), danger: true });
     } finally {
       setIsStoppingServer(false);
     }

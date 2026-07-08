@@ -910,7 +910,7 @@ function TextChat({
                         title={m.filename}
                       >
                         <span className="chat-model-name-text">{m.filename}</span>
-                        {isActive && <span className="chat-model-active-badge">Active</span>}
+                        {isActive && <span className="chat-model-active-badge">Активна</span>}
                       </button>
                     );
                   })}
@@ -992,7 +992,7 @@ function TextChat({
           {loadingModel ? (
             <div className="chat-empty" style={{ maxWidth: "480px", margin: "auto", textAlign: "center", padding: "60px 20px" }}>
               <LoaderCircle className="progress-spinner" size={48} style={{ color: "var(--md-sys-color-primary)", marginBottom: "16px" }} />
-              <h3 style={{ fontWeight: 600, fontSize: "1.25rem", marginBottom: "8px", color: "var(--md-sys-color-on-surface)" }}>Loading Text Model</h3>
+              <h3 style={{ fontWeight: 600, fontSize: "1.25rem", marginBottom: "8px", color: "var(--md-sys-color-on-surface)" }}>Загрузка текстовой модели</h3>
               <code style={{
                 display: "block", background: "var(--md-sys-color-surface-variant)",
                 color: "var(--md-sys-color-on-surface-variant)", padding: "8px 12px",
@@ -1002,13 +1002,13 @@ function TextChat({
                 {loadingModel}
               </code>
               <p style={{ fontSize: "0.9rem", color: "var(--md-sys-color-outline)", lineHeight: 1.5, marginBottom: "24px" }}>
-                Initializing llama.cpp server and loading the model weights into memory. This can take up to 30 seconds depending on model size and hardware speed.
+                Инициализация сервера llama.cpp и загрузка весов модели в память. Это может занять до 30 секунд в зависимости от размера модели и скорости железа.
               </p>
               <button className="m3-btn m3-btn-error" onClick={handleCancelLlmLoad}
                 style={{ display: "inline-flex", alignItems: "center", gap: "8px", height: "38px", padding: "0 16px", fontSize: "0.85rem", borderRadius: "var(--md-shape-corner-medium)" }}
               >
                 <Square size={14} fill="currentColor" />
-                <span>Cancel Load</span>
+                <span>Отменить загрузку</span>
               </button>
             </div>
           ) : (
@@ -1018,15 +1018,15 @@ function TextChat({
                   <div className="chat-empty-icon">
                     <Bot size={30} />
                   </div>
-                  <h3>Local AI Chat</h3>
-                  <p>Your private, offline AI assistant. Choose a GGUF model above and start a conversation — everything stays on your machine.</p>
+                  <h3>Локальный чат ИИ</h3>
+                  <p>Ваш приватный офлайн ассистент. Выберите модель GGUF выше и начните разговор — всё остаётся на вашем компьютере.</p>
                   {status.ready && (
                     <div className="chat-suggestions">
                       {[
-                        { icon: "✍️", text: "Write a professional email to reschedule a meeting" },
-                        { icon: "💡", text: "Explain how transformers work in simple terms" },
-                        { icon: "🐛", text: "Help me debug this Python code" },
-                        { icon: "📋", text: "Summarize the key points of a topic" },
+                        { icon: "✍️", text: "Напиши деловое письмо о переносе встречи" },
+                        { icon: "💡", text: "Объясни, как работают трансформеры, простыми словами" },
+                        { icon: "🐛", text: "Помоги отладить этот код на Python" },
+                        { icon: "📋", text: "Суммируй основные моменты темы" },
                       ].map((s, i) => (
                         <button
                           key={i}
@@ -1061,13 +1061,13 @@ function TextChat({
                   >
                     {/* Avatar */}
                     <div className={`chat-avatar ${message.role === "user" ? "user" : "ai"}`}>
-                      {message.role === "user" ? "You" : "AI"}
+                      {message.role === "user" ? "Вы" : "ИИ"}
                     </div>
 
                     {/* Bubble + stats */}
                     <div className="chat-bubble-wrap">
                       <span className="chat-sender-label">
-                        {message.role === "user" ? "You" : "Local AI"}
+                        {message.role === "user" ? "Вы" : "Локальный ИИ"}
                       </span>
                       {message.role === "assistant" && displayReasoning && deepThinkEnabled && (
                         <ThinkingBlock
@@ -1106,7 +1106,7 @@ function TextChat({
                         }}>
                           <div style={{ display: "flex", alignItems: "center", gap: "6px", fontWeight: 700, marginBottom: "6px" }}>
                             <Globe2 size={13} />
-                            <span>Sources</span>
+                            <span>Источники</span>
                           </div>
                           <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
                             {message.webSources.map((source, sourceIndex) => (
@@ -1129,12 +1129,12 @@ function TextChat({
                         <>
                           {message.generationStats.truncated && (
                             <div className="chat-generation-warning">
-                              Response reached the token limit. Ask "continue" or switch Max Response Tokens to Manual for a larger cap.
+                              Ответ достиг лимита токенов. Попросите "продолжить" или переключите Максимальное количество токенов на Ручной режим, чтобы увеличить лимит.
                             </div>
                           )}
                           <div className={`chat-generation-stats ${message.generationStats.status}`}>
                           {message.generationStats.status === "starting" ? (
-                            <><LoaderCircle size={11} className="progress-spinner" /> {message.generationStats.web ? "Searching web..." : message.generationStats.vision ? "Processing image..." : "Waiting for first token..."}</>
+                            <><LoaderCircle size={11} className="progress-spinner" /> {message.generationStats.web ? "Поиск в сети..." : message.generationStats.vision ? "Обработка изображения..." : "Ожидание первого токена..."}</>
                           ) : message.generationStats.status === "streaming" ? (
                             <><span style={{ opacity: 0.7 }}>⚡</span> {message.generationStats.tokensPerSecond.toFixed(1)} tok/s</>
                           ) : (
@@ -1202,7 +1202,7 @@ function TextChat({
                     sendMessage();
                   }
                 }}
-                placeholder={status.ready ? "Message your local model... (Shift+Enter for new line)" : "Select and load a GGUF model above to begin"}
+                placeholder={status.ready ? "Напишите локальной модели... (Shift+Enter — новая строка)" : "Выберите и загрузите модель GGUF сверху, чтобы начать"}
                 disabled={!status.ready || isBusy}
                 rows={1}
               />
@@ -1215,7 +1215,7 @@ function TextChat({
                   className="chat-composer-attach-btn"
                   onClick={() => fileInputRef.current?.click()}
                   disabled={!supportsVision || isBusy}
-                  title={supportsVision ? "Attach files or images" : visionStatus}
+                  title={supportsVision ? "Прикрепить файлы или изображения" : visionStatus}
                 >
                   <Paperclip size={17} />
                 </button>
@@ -1223,7 +1223,7 @@ function TextChat({
                   className={`chat-composer-deepthink-btn web-search-btn ${useWebSearch ? "active" : ""}`}
                   onClick={() => setUseWebSearch((value) => !value)}
                   disabled={!status.ready || isBusy}
-                  title={useWebSearch ? "Disable web search" : "Enable web search"}
+                  title={useWebSearch ? "Отключить поиск в сети" : "Включить поиск в сети"}
                 >
                   <Globe2 size={14} />
                   <span>Web</span>
@@ -1233,7 +1233,7 @@ function TextChat({
                   <button
                     className={`chat-composer-deepthink-btn deepthink-btn ${deepThinkEnabled ? "active" : ""}`}
                     onClick={handleThinkingToggle}
-                    title={deepThinkEnabled ? "Disable DeepThink reasoning" : "Enable DeepThink reasoning"}
+                    title={deepThinkEnabled ? "Отключить DeepThink" : "Включить DeepThink"}
                   >
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className={deepThinkEnabled ? "rotate-anim" : ""}>
                       <circle cx="12" cy="12" r="3" />
@@ -1247,7 +1247,7 @@ function TextChat({
 
               <div className="chat-composer-toolbar-right">
                 {isBusy && status.ready ? (
-                  <button className="chat-composer-stop-btn" onClick={handleStopGeneration} title="Stop generation">
+                  <button className="chat-composer-stop-btn" onClick={handleStopGeneration} title="Остановить генерацию">
                     <Square size={15} fill="currentColor" />
                   </button>
                 ) : (
@@ -1255,7 +1255,7 @@ function TextChat({
                     className="chat-composer-send-btn"
                     onClick={sendMessage}
                     disabled={(!input.trim() && attachments.length === 0) || !status.ready}
-                    title="Send message"
+                    title="Отправить сообщение"
                   >
                     <Send size={17} />
                   </button>
@@ -1263,7 +1263,7 @@ function TextChat({
               </div>
             </div>
           </div>
-          <div className="chat-composer-hint">Enter to send &nbsp;·&nbsp; Shift+Enter for new line</div>
+          <div className="chat-composer-hint">Enter — отправить &nbsp;·&nbsp; Shift+Enter — новая строка</div>
         </div>
       </section>
     </div>

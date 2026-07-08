@@ -87,8 +87,8 @@ function Generator({
         const models = await listLlmModels();
         if (models.length === 0) {
           showAlert({
-            title: "No Text Models",
-            message: "You haven't downloaded any text models yet. Please go to the 'Model Manager' or 'Text Chat' tab to download a GGUF model first.",
+            title: "Нет текстовых моделей",
+            message: "Вы ещё не загрузили текстовые модели. Перейдите на вкладку «Менеджер моделей» или «Текстовый чат», чтобы сначала скачать модель GGUF.",
             danger: true
           });
           setIsEnhancing(false);
@@ -99,10 +99,10 @@ function Generator({
         targetModel = models.some(m => m.filename === savedLlm) ? savedLlm : models[0]?.filename;
         
         const confirm = await showConfirm({
-          title: "Load Text Model?",
-          message: `Enhancing your prompt requires loading the local text model "${targetModel}". This will temporarily unload the image model from memory. Do you want to proceed?`,
-          confirmLabel: "Load & Enhance",
-          cancelLabel: "Cancel"
+          title: "Загрузить текстовую модель?",
+          message: `Для улучшения запроса требуется загрузить локальную текстовую модель "${targetModel}". Это временно выгрузит модель изображения из памяти. Продолжить?`,
+          confirmLabel: "Загрузить и улучшить",
+          cancelLabel: "Отменить"
         });
         
         if (!confirm) {
@@ -138,7 +138,7 @@ function Generator({
       setPrompt(cleanResponse);
     } catch (err) {
       showAlert({
-        title: "Prompt Enhancement Failed",
+        title: "Не удалось улучшить запрос",
         message: err.message || String(err),
         danger: true
       });
@@ -158,12 +158,12 @@ function Generator({
     e.target.value = "";
     if (!file) return;
     if (!file.type.startsWith("image/")) {
-      setErrorMsg("Please choose an image file (PNG, JPG, or WEBP).");
+      setErrorMsg("Выберите файл изображения (PNG, JPG или WEBP).");
       return;
     }
     const reader = new FileReader();
     reader.onload = () => setBaseImage(reader.result);
-    reader.onerror = () => setErrorMsg("Could not read the selected image file.");
+    reader.onerror = () => setErrorMsg("Не удалось прочитать выбранный файл изображения.");
     reader.readAsDataURL(file);
   };
 

@@ -1518,23 +1518,23 @@ function ModelManager({
       <div className="m3-card" style={{ marginTop: "24px" }}>
         <h3 className="m3-card-title">
           <Database size={18} style={{ color: "var(--md-sys-color-primary)" }} />
-          Local {activeModelType === "image" ? "Image" : activeModelType === "text" ? "Text" : activeModelType === "speech" ? "Speech" : "TTS"} Models ({displayedLocalModels.length})
+          Локальные {activeModelType === "image" ? "модели изображений" : activeModelType === "text" ? "текстовые модели" : activeModelType === "speech" ? "модели речи" : "TTS-модели"} ({displayedLocalModels.length})
         </h3>
         
         {isLoadingModels ? (
           <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: "10px", padding: "24px 0", color: "var(--md-sys-color-outline)" }}>
             <RefreshCw className="progress-spinner" size={16} />
-            <span style={{ fontSize: "0.9rem" }}>Scanning models folder...</span>
+            <span style={{ fontSize: "0.9rem" }}>Сканирование папки моделей...</span>
           </div>
         ) : displayedLocalModels.length === 0 ? (
           <p style={{ fontSize: "0.9rem", color: "var(--md-sys-color-outline)", textAlign: "center", padding: "16px 0" }}>
             {activeModelType === "image"
-              ? "No image models detected in app/models/. Download from the library below or import a file."
+              ? "В папке app/models/ не обнаружено моделей изображений. Скачайте из библиотеки ниже или импортируйте файл."
               : activeModelType === "text"
-              ? "No text models detected in app/llm-models/. Download from the library below or import a file."
+              ? "В папке app/llm-models/ не обнаружено текстовых моделей. Скачайте из библиотеки ниже или импортируйте файл."
               : activeModelType === "speech"
-              ? "No speech models detected in app/speech-models/. Download from the library below or import a .bin file."
-              : "No TTS models detected in app/tts-models/. Install Kokoro from the library below or import a .json manifest."}
+              ? "В папке app/speech-models/ не обнаружено моделей речи. Скачайте из библиотеки ниже или импортируйте .bin файл."
+              : "В папке app/tts-models/ не обнаружено моделей TTS. Установите Kokoro из библиотеки ниже или импортируйте .json манифест."}
           </p>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
@@ -1560,12 +1560,12 @@ function ModelManager({
                     <span style={{ fontWeight: 600, fontSize: "0.95rem" }}>{filename}</span>
                     <span style={{ fontSize: "0.75rem", opacity: 0.8 }}>
                       {activeModelType === "image"
-                        ? (model.backendType === "openvino-npu" ? "OpenVINO NPU Model" : model.format || "Local Weights File")
+                        ? (model.backendType === "openvino-npu" ? "Модель OpenVINO NPU" : model.format || "Локальный файл весов")
                         : activeModelType === "text"
-                        ? "llama.cpp GGUF Model"
+                        ? "Модель llama.cpp GGUF"
                         : activeModelType === "speech"
-                        ? `${model.language || "Whisper"} Model`
-                        : "Kokoro ONNX Model"
+                        ? `${model.language || "Whisper"} модель`
+                        : "Модель Kokoro ONNX"
                       } • {model.size || formatBytes(model.sizeBytes)}
                     </span>
                   </div>
@@ -1613,7 +1613,7 @@ function ModelManager({
       <div className="workspace-title-section" style={{ marginTop: "32px", marginBottom: "16px" }}>
         <h3 className="m3-card-title">
           <Library size={20} style={{ color: "var(--md-sys-color-primary)" }} />
-          {activeModelType === "text" ? "Hugging Face Model Library" : activeModelType === "speech" ? "Speech Model Library" : activeModelType === "tts" ? "TTS Model Library" : "Model Library"}
+          {activeModelType === "text" ? "Библиотека моделей Hugging Face" : activeModelType === "speech" ? "Библиотека моделей речи" : activeModelType === "tts" ? "Библиотека TTS" : "Библиотека моделей"}
         </h3>
       </div>
 
@@ -1625,16 +1625,16 @@ function ModelManager({
               type="search"
               value={modelSearch}
               onChange={(event) => setModelSearch(event.target.value)}
-              placeholder="Search Hugging Face GGUF models..."
-              aria-label="Search Hugging Face models"
+              placeholder="Поиск GGUF моделей Hugging Face..."
+              aria-label="Поиск моделей Hugging Face"
             />
             {modelSearch && (
-              <button type="button" onClick={() => setModelSearch("")} title="Clear search" aria-label="Clear model search">
+              <button type="button" onClick={() => setModelSearch("")} title="Очистить поиск" aria-label="Очистить поиск моделей">
                 <X size={16} />
               </button>
             )}
           </div>
-          <div className="model-filter-row" aria-label="Model filters">
+          <div className="model-filter-row" aria-label="Фильтры моделей">
             {MODEL_FILTERS.map((filter) => {
               const selected = selectedFilters.includes(filter.id);
               return (
@@ -1652,19 +1652,19 @@ function ModelManager({
             })}
             {selectedFilters.length > 0 && (
               <button type="button" className="model-filter-clear" onClick={() => setSelectedFilters([])}>
-                Clear filters
+                Очистить фильтры
               </button>
             )}
           </div>
           {isSearchingModels && (
             <div className="model-discovery-loading">
               <RefreshCw className="progress-spinner" size={16} />
-              <span>Loading models from Hugging Face...</span>
+              <span>Загрузка моделей с Hugging Face...</span>
             </div>
           )}
           {modelSearchError && (
             <div className="model-search-warning">
-              {modelSearchError} Showing the built-in fallback catalog.
+              {modelSearchError} Показывается встроенный каталог резервных моделей.
             </div>
           )}
         </div>
@@ -1673,7 +1673,7 @@ function ModelManager({
       <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
         {activeModelType === "text" && hasHuggingFaceResults && !isSearchingModels && displayedHuggingFaceModels.length === 0 && (
           <div className="m3-card model-search-empty">
-            No downloadable single-file GGUF models matched this search and filter combination.
+            Не найдено загружаемых GGUF моделей в одном файле под выбранные поиск и фильтры.
           </div>
         )}
         {visibleModelLibrary.filter((section) => section.items.length > 0).map((section) => (
@@ -1697,7 +1697,7 @@ function ModelManager({
                       <span style={{ fontWeight: 700, display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
                         {model.name}
                         {isRecommended && (
-                          <span title={model.fitReason || `Recommended for ${systemTier} tier hardware`} style={{
+                          <span title={model.fitReason || `Рекомендуется для оборудования уровня ${systemTier}`} style={{
                             fontSize: "0.68rem", 
                             color: "#2e7d32", 
                             background: "#e8f5e9", 
@@ -1715,11 +1715,11 @@ function ModelManager({
                       </span>
                       {model.size && model.size !== "Unknown" ? (
                         <span style={{ fontSize: "0.75rem", color: "var(--md-sys-color-on-surface-variant)", fontWeight: 600 }}>
-                          File size: {model.size}
+                          Размер файла: {model.size}
                         </span>
                       ) : model.approxSize ? (
                         <span style={{ fontSize: "0.75rem", color: "var(--md-sys-color-on-surface-variant)", fontWeight: 600 }}>
-                          File size: approx. {model.approxSize}
+                          Размер файла: примерно {model.approxSize}
                         </span>
                       ) : null}
                     </div>
@@ -1733,7 +1733,7 @@ function ModelManager({
                             <span className="loading-dot"></span>
                             Downloading
                           </span>
-                          <span>{downloadProgress > 0 ? `${downloadProgress}%` : "Preparing"}</span>
+                          <span>{downloadProgress > 0 ? `${downloadProgress}%` : "Подготовка"}</span>
                         </div>
                         <div className="model-progress-bar">
                           <div className="model-progress-fill" style={{ width: `${Math.min(100, Math.max(0, downloadProgress))}%`, transition: "width 0.2s ease" }}></div>
@@ -1752,7 +1752,7 @@ function ModelManager({
                       disabled={installed || downloadingModelId !== null}
                     >
                       {installed ? <HardDrive size={14} /> : downloading ? <RefreshCw className="progress-spinner" size={14} /> : <DownloadCloud size={14} />}
-                      <span>{installed ? "Downloaded" : downloading ? "Downloading" : needsProjector ? "Download Vision File" : "Download"}</span>
+                      <span>{installed ? "Загружено" : downloading ? "Загрузка" : needsProjector ? "Скачать файл проектора" : "Скачать"}</span>
                     </button>
                     <a
                       href={model.pageUrl || model.url}
@@ -1767,7 +1767,7 @@ function ModelManager({
                         textDecoration: "none",
                       }}
                     >
-                      {model.pageUrl ? "View on Hugging Face" : "Save to Downloads folder"}
+                      {model.pageUrl ? "Посмотреть на Hugging Face" : "Сохранить в папке загрузок"}
                     </a>
                   </div>
                 );
@@ -1783,7 +1783,7 @@ function ModelManager({
             disabled={isLoadingMoreModels}
           >
             {isLoadingMoreModels && <RefreshCw className="progress-spinner" size={16} />}
-            <span>{isLoadingMoreModels ? "Loading more models..." : "Load More"}</span>
+            <span>{isLoadingMoreModels ? "Загрузка моделей..." : "Загрузить ещё"}</span>
           </button>
         )}
       </div>
@@ -1792,17 +1792,17 @@ function ModelManager({
       <div className="workspace-title-section" style={{ marginTop: "32px", marginBottom: "16px" }}>
         <h3 className="m3-card-title">
           <FolderOpen size={20} style={{ color: "var(--md-sys-color-primary)" }} />
-          Local Model Import
+          Импорт локальной модели
         </h3>
       </div>
       {/* Importing Progress Bar */}
       {importProgress !== null && (
         <div className="m3-card" style={{ borderLeft: "4px solid var(--md-sys-color-primary)", marginTop: "24px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px" }}>
-            <h4 style={{ fontWeight: 600 }}>Copying Model to local folder: {importInfo.filename}</h4>
+            <h4 style={{ fontWeight: 600 }}>Копирование модели в локальную папку: {importInfo.filename}</h4>
             <button className="m3-btn m3-btn-error" style={{ height: "34px", padding: "0 14px" }} onClick={handleCancelImport}>
               <Square size={14} />
-              <span>Stop Import</span>
+              <span>Остановить импорт</span>
             </button>
           </div>
           <div className="model-progress-section" style={{ margin: "12px 0 6px 0" }}>
@@ -1827,19 +1827,19 @@ function ModelManager({
             disabled={importProgress !== null}
           />
           <FolderOpen className="import-icon" />
-          <span style={{ fontWeight: 600 }}>Choose weights file</span>
+          <span style={{ fontWeight: 600 }}>Выберите файл весов</span>
           <span style={{ fontSize: "0.75rem", color: "var(--md-sys-color-outline)", textAlign: "center" }}>
-            Select {activeModelType === "image" ? "`.safetensors` or `.ckpt` weights." : activeModelType === "text" ? "`.gguf` weights." : activeModelType === "speech" ? "`whisper.cpp .bin` weights." : "`Kokoro .json` manifest."}
+            {activeModelType === "image" ? "Выберите веса `.safetensors` или `.ckpt`." : activeModelType === "text" ? "Выберите веса `.gguf`." : activeModelType === "speech" ? "Выберите веса `whisper.cpp .bin`." : "Выберите манифест `Kokoro .json`."}
           </span>
         </label>
 
         <div className="m3-card" style={{ display: "flex", flexDirection: "column", justifyContent: "center", margin: 0, padding: "20px" }}>
           <h4 style={{ fontWeight: 600, marginBottom: "8px", display: "flex", alignItems: "center", gap: "8px" }}>
             <DownloadCloud size={16} />
-            Download Model from URL
+            Скачать модель по URL
           </h4>
           <p style={{ fontSize: "0.75rem", color: "var(--md-sys-color-outline)", marginBottom: "12px" }}>
-            Download any {activeModelType === "image" ? "Safetensors" : activeModelType === "text" ? "GGUF" : activeModelType === "speech" ? "Whisper .bin" : "Kokoro manifest"} model from Hugging Face directly to your models folder.
+            Скачайте любую модель {activeModelType === "image" ? "Safetensors" : activeModelType === "text" ? "GGUF" : activeModelType === "speech" ? "Whisper .bin" : "Kokoro manifest"} с Hugging Face прямо в вашу папку моделей.
           </p>
           {isUrlDownloading ? (
             <div className="model-progress-section" style={{ marginTop: "0px" }}>
@@ -1857,7 +1857,7 @@ function ModelManager({
               </div>
               <button className="m3-btn m3-btn-error" style={{ height: "34px", padding: "0 14px", marginTop: "10px" }} onClick={handleCancelDownload}>
                 <Square size={14} />
-                <span>Stop Download</span>
+                <span>Остановить загрузку</span>
               </button>
             </div>
           ) : (
@@ -1866,7 +1866,7 @@ function ModelManager({
                 type="text"
                 className="m3-input"
                 style={{ flex: 1, height: "40px" }}
-                placeholder="e.g. https://huggingface.co/..."
+                placeholder="например https://huggingface.co/..."
                 value={downloadUrl}
                 onChange={(e) => setDownloadUrl(e.target.value)}
                 disabled={downloadingModelId !== null}
@@ -1877,11 +1877,12 @@ function ModelManager({
                 style={{ height: "40px" }}
                 disabled={downloadingModelId !== null}
               >
-                Download
+                Скачать
               </button>
             </form>
           )}
         </div>
+      </div>
       </div>
 
       {pendingLoadModel && (
