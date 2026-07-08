@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 #
-# Uncensored AI Studio - Linux Launcher
-# Double-click or run: ./linux.sh
-# Use --max-perf to enable ROCm backend downloads on Linux first setup.
+# Неприметная AI Studio — лаунчер для Linux
+# Двойной клик или запуск: ./linux.sh
+# Используйте --max-perf, чтобы при первом запуске включить загрузку ROCm backend на Linux.
 #
+
 
 set -euo pipefail
 
@@ -12,7 +13,8 @@ APP_DIR="$SCRIPT_DIR/app"
 PLATFORM="$(uname -s)"
 
 if [[ "$PLATFORM" != "Linux" ]]; then
-  echo "[ERROR] This script is for Linux only. Please run ./mac.sh on macOS." >&2
+  echo "[ОШИБКА] Этот скрипт предназначен только для Linux. На macOS запустите ./mac.sh." >&2
+
   exit 1
 fi
 
@@ -65,7 +67,8 @@ resolve_frontend_port() {
     fi
   done
 
-  echo "[ERROR] No free frontend port found. Tried $preferred and 1421-1499." >&2
+  echo "[ОШИБКА] Не найден свободный порт для фронтенда. Пробовал $preferred и диапазон 1421-1499." >&2
+
   return 1
 }
 
@@ -79,8 +82,9 @@ for arg in "$@"; do
       SETUP_OPENVINO=1
       ;;
     *)
-      echo "[ERROR] Unknown option: $arg" >&2
-      echo "Usage: ./linux.sh [--max-perf] [--setup-openvino]" >&2
+      echo "[ОШИБКА] Неизвестный параметр: $arg" >&2
+      echo "Использование: ./linux.sh [--max-perf] [--setup-openvino]" >&2
+
       exit 1
       ;;
   esac
@@ -90,12 +94,14 @@ if [[ $SETUP_OPENVINO -eq 1 ]]; then
   bash "$SCRIPT_DIR/scripts/setup/setup-openvino-npu.sh"
 fi
 
-# ── Setup node_modules to avoid OS conflicts ────────────────────────────────
+# Настраиваю node_modules, чтобы избежать конфликтов платформ.
+
 FRONTEND_NODE_MODULES="$APP_DIR/frontend/node_modules"
 LINUX_NODE_MODULES="$APP_DIR/frontend/node_modules_linux"
 ACTIVE_OS_FILE="$APP_DIR/frontend/.active_modules_os"
 
-# Attempt to create a test symlink to check if filesystem supports symlinks
+# Проверяю, поддерживает ли файловая система символические ссылки.
+
 USE_SYMLINKS=true
 TEST_LINK="$APP_DIR/frontend/.test_symlink"
 rm -f "$TEST_LINK"
@@ -149,17 +155,21 @@ else
   echo "linux" > "$ACTIVE_OS_FILE"
 fi
 
-# ── First-time setup check ─────────────────────────────────────────────────
+# ── Проверка первого запуска ────────────────────────────────────────────
+
+
 if [[ ! -d "$NODE_DIR" ]]; then
   SETUP_MODE="First-Time Setup"
 fi
 
 if [[ ! -x "$NODE_BIN" ]]; then
-  SETUP_REASON="Portable Node.js for Linux is missing."
+  SETUP_REASON="Не найден переносимый Node.js для Linux."
+
 fi
 
 if [[ ! -f "$DIST_INDEX" ]]; then
-  SETUP_REASON="Frontend build is missing."
+  SETUP_REASON="Отсутствует сборка фронтенда (build)."
+
 fi
 
 # At minimum we need CPU or Vulkan backend on Linux, and both CLI and server binaries must be executable
@@ -173,16 +183,20 @@ LLM_CPU_PATH="$APP_DIR/llm-backend/linux/cpu/llama-server"
 SPEECH_BACKEND_PATH="$APP_DIR/speech-backend/linux/cpu/whisper-cli"
 TTS_RUNTIME_PATH="$APP_DIR/tts-runtime/node_modules/kokoro-js"
 if [[ ! -x "$CPU_BACKEND_PATH" || ! -x "$CPU_SERVER_PATH" ]] && [[ ! -x "$BACKEND_PATH" || ! -x "$VULKAN_SERVER_PATH" ]]; then
-  SETUP_REASON="Linux backend binaries are missing or not executable."
+  SETUP_REASON="Не найдены файлы бэкенда Linux или они недоступны для выполнения."
+
 fi
 if [[ ! -x "$LLM_CUDA_PATH" && ! -x "$LLM_ROCM_PATH" && ! -x "$LLM_SYCL_PATH" && ! -x "$LLM_VULKAN_PATH" && ! -x "$LLM_CPU_PATH" ]]; then
-  SETUP_REASON="Linux llama.cpp text backend is missing or not executable."
+  SETUP_REASON="Отсутствует (или недоступен для выполнения) текстовый бэкенд llama.cpp для Linux."
+
 fi
 if [[ ! -x "$SPEECH_BACKEND_PATH" ]]; then
-  SETUP_REASON="Linux whisper.cpp speech backend is missing or not executable."
+  SETUP_REASON="Отсутствует (или недоступен для выполнения) speech-бэкенд whisper.cpp для Linux."
+
 fi
 if [[ ! -d "$TTS_RUNTIME_PATH" ]]; then
-  SETUP_REASON="Kokoro text-to-speech runtime is missing."
+  SETUP_REASON="Отсутствует runtime Kokoro для text-to-speech."
+
 fi
 
 if [[ -n "$SETUP_REASON" ]]; then
@@ -192,17 +206,22 @@ if [[ -n "$SETUP_REASON" ]]; then
   echo "  ============================================================"
   echo ""
   if [[ "$SETUP_MODE" == "First-Time Setup" ]]; then
-    echo "  This looks like your first run on Linux. Setting up automatically..."
-  else
-    echo "  Uncensored AI Studio needs a quick repair before launch."
-  fi
-  echo "  Reason: $SETUP_REASON"
-  echo "  Models are not downloaded during setup. Download or import them in the app."
-  echo ""
-  read -rp "  Press Enter to continue, or Ctrl+C to cancel."
+    echo "  Похоже, это первый запуск на Linux. Выполняю настройку автоматически..."
 
-  # Clear managed backend ports before setup. Do not kill the frontend port;
-  # launch will select a free frontend port automatically.
+  else
+    echo "  Нужна быстрая проверка и восстановление перед запуском."
+
+  fi
+  echo "  Причина: $SETUP_REASON"
+  echo "  Во время настройки модели не загружаются. Загрузите их или импортируйте в приложении."
+
+  echo ""
+  read -rp "  Нажмите Enter, чтобы продолжить, или Ctrl+C чтобы отменить."
+
+
+  # Очищаю порты управляемого бэкенда перед настройкой.
+  # Порт фронтенда трогать не нужно — лаунчер сам выберет свободный порт.
+
   if command -v lsof >/dev/null 2>&1; then
     lsof -t -i:8080 -i:"${LLM_PORT}" | xargs kill -9 >/dev/null 2>&1 || true
   elif command -v fuser >/dev/null 2>&1; then
@@ -212,27 +231,32 @@ if [[ -n "$SETUP_REASON" ]]; then
 
   if ! bash "$SETUP_SCRIPT" $MAX_PERF_FLAG; then
     echo ""
-    echo "  [ERROR] Setup failed. Please check the output above."
-    read -rp "  Press Enter to close..."
+    echo "  [ОШИБКА] Не удалось выполнить настройку. Проверьте вывод выше."
+    read -rp "  Нажмите Enter, чтобы закрыть..."
+
     exit 1
   fi
 fi
 
-# ── Launch ─────────────────────────────────────────────────────────────────
+# ── Запуск ────────────────────────────────────────────────────────────────
+
 clear 2>/dev/null || true
 echo ""
 echo "  ============================================================"
-echo "   UNCENSORED AI STUDIO      |  Launching..."
+echo "   UNCENSORED AI STUDIO      |  Запуск..."
+
 echo "  ============================================================"
 echo ""
 
 REQUESTED_FRONTEND_PORT="$FRONTEND_PORT"
 FRONTEND_PORT="$(resolve_frontend_port "$REQUESTED_FRONTEND_PORT")"
 if [[ "$FRONTEND_PORT" != "$REQUESTED_FRONTEND_PORT" ]]; then
-  echo "  Frontend port ${REQUESTED_FRONTEND_PORT} is busy; using ${FRONTEND_PORT} instead."
+  echo "  Порт фронтенда ${REQUESTED_FRONTEND_PORT} занят; используется ${FRONTEND_PORT} вместо этого."
 fi
 
-# Clear managed backend ports
+
+  # Очищаю порты управляемого бэкенда
+
 if command -v lsof >/dev/null 2>&1; then
   lsof -t -i:8080 -i:"${LLM_PORT}" | xargs kill -9 >/dev/null 2>&1 || true
 elif command -v fuser >/dev/null 2>&1; then
@@ -240,53 +264,71 @@ elif command -v fuser >/dev/null 2>&1; then
   fuser -k "${LLM_PORT}/tcp" >/dev/null 2>&1 || true
 fi
 
-# Start the server
-echo "  Starting Uncensored AI Studio..."
+# Запускаю сервер
+
+echo "  Запуск Uncensored AI Studio..."
+
 export PATH="$NODE_DIR/bin:$PATH"
 export FRONTEND_PORT="$FRONTEND_PORT"
 
-# Run server in background and capture PID
+# Запускаю сервер в фоне и сохраняю PID
+
 "$NODE_BIN" "$SERVE_SCRIPT" &
 SERVER_PID=$!
 
-# Wait for server to be ready
+# Жду готовности сервера
+
 sleep 2
 
-# Open browser
+# Открываю браузер
+
 if command -v xdg-open >/dev/null 2>&1; then
-  echo "  Opening browser at http://localhost:${FRONTEND_PORT}"
+  echo "  Открываю браузер: http://localhost:${FRONTEND_PORT}"
+
   xdg-open "http://localhost:${FRONTEND_PORT}" >/dev/null 2>&1 &
 else
-  echo "  Open your browser to: http://localhost:${FRONTEND_PORT}"
+  echo "  Откройте браузер по адресу: http://localhost:${FRONTEND_PORT}"
+
 fi
 
 echo ""
 echo "  ============================================================"
-echo "   Running!"
+echo "   Запущено!"
+
 echo "   Web UI:     http://localhost:${FRONTEND_PORT}"
-echo "   GPU API:    Auto-selected by the app (starts at 8080)"
-echo "   Text API:   Starts when a GGUF model is loaded (port ${LLM_PORT})"
-echo "   Speech:     Managed locally by the app"
-echo "   TTS:        Managed locally by the app"
+echo "   GPU API:    Автовыбор приложением (стартует с 8080)"
+
+echo "   Text API:   Запускается при загрузке модели GGUF (порт ${LLM_PORT})"
+
+echo "   Speech:     Управляется локально приложением"
+
+echo "   TTS:        Управляется локально приложением"
+
 echo ""
-echo "   Press Ctrl+C in this window to stop all services."
+echo "   Нажмите Ctrl+C в этом окне, чтобы остановить все службы."
+
 echo "  ============================================================"
 echo ""
 
-# Cleanup on exit
+# Очистка при завершении
+
 cleanup() {
   echo ""
-  echo "  Shutting down..."
+  echo "  Останавливаю..."
+
+
   if kill -0 "$SERVER_PID" >/dev/null 2>&1; then
     kill -TERM "$SERVER_PID" >/dev/null 2>&1 || true
     sleep 1
     kill -KILL "$SERVER_PID" >/dev/null 2>&1 || true
   fi
-  echo "  Done. Goodbye!"
+  echo "  Готово. До свидания!"
+
   exit 0
 }
 trap cleanup SIGINT SIGTERM
 
-# Keep script alive
+# Держу скрипт активным
+
 wait "$SERVER_PID" || true
 cleanup

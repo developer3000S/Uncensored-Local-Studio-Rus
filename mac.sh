@@ -75,7 +75,8 @@ resolve_frontend_port() {
   return 1
 }
 
-# ── Setup node_modules to avoid OS conflicts ────────────────────────────────
+# Настраиваю node_modules, чтобы избежать конфликтов платформ.
+
 FRONTEND_NODE_MODULES="$APP_DIR/frontend/node_modules"
 MAC_NODE_MODULES="$APP_DIR/frontend/node_modules_mac"
 ACTIVE_OS_FILE="$APP_DIR/frontend/.active_modules_os"
@@ -134,7 +135,8 @@ else
   echo "mac" > "$ACTIVE_OS_FILE"
 fi
 
-# ── First-time setup check ─────────────────────────────────────────────────
+# Проверка первого запуска ────────────────────────────────────────────────
+
 if [[ ! -d "$NODE_DIR" ]]; then
   SETUP_MODE="First-Time Setup"
 fi
@@ -214,8 +216,8 @@ fi
 
   # Очищаю порты управляемого бэкенда
   if command -v lsof >/dev/null 2>&1; then
+    lsof -t -i:8080 -i:"${LLM_PORT}" | xargs kill -9 >/dev/null 2>&1 || true
 
-  lsof -t -i:8080 -i:"${LLM_PORT}" | xargs kill -9 >/dev/null 2>&1 || true
 elif command -v fuser >/dev/null 2>&1; then
   fuser -k "8080/tcp" >/dev/null 2>&1 || true
   fuser -k "${LLM_PORT}/tcp" >/dev/null 2>&1 || true
