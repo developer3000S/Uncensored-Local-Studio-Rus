@@ -18,17 +18,17 @@ import {
 } from "../services/api";
 
 const LANGUAGE_OPTIONS = [
-  { value: "auto", label: "Auto detect" },
-  { value: "en", label: "English" },
-  { value: "es", label: "Spanish" },
-  { value: "fr", label: "French" },
-  { value: "de", label: "German" },
-  { value: "it", label: "Italian" },
-  { value: "pt", label: "Portuguese" },
-  { value: "hi", label: "Hindi" },
-  { value: "ja", label: "Japanese" },
-  { value: "ko", label: "Korean" },
-  { value: "zh", label: "Chinese" },
+  { value: "auto", label: "Автоопределение" },
+  { value: "en", label: "Английский" },
+  { value: "es", label: "Испанский" },
+  { value: "fr", label: "Французский" },
+  { value: "de", label: "Немецкий" },
+  { value: "it", label: "Итальянский" },
+  { value: "pt", label: "Португальский" },
+  { value: "hi", label: "Хинди" },
+  { value: "ja", label: "Японский" },
+  { value: "ko", label: "Корейский" },
+  { value: "zh", label: "Китайский" },
 ];
 
 function flattenFloat32(chunks) {
@@ -194,7 +194,7 @@ export default function SpeechTranscriber({
   }, []);
 
   useEffect(() => {
-    refresh().catch((err) => showAlert?.({ title: "Speech Status Failed", message: err.message || String(err), danger: true }));
+    refresh().catch((err) => showAlert?.({ title: "Ошибка статуса речи", message: err.message || String(err), danger: true }));
     const interval = setInterval(() => {
       refresh().catch(() => {});
     }, 2000);
@@ -247,7 +247,7 @@ export default function SpeechTranscriber({
       }
       await refresh();
     } catch (err) {
-      showAlert?.({ title: "Speech Model Load Failed", message: err.message || String(err), danger: true });
+      showAlert?.({ title: "Загрузка модели речи не удалась", message: err.message || String(err), danger: true });
     } finally {
       setIsLoadingModel(false);
     }
@@ -267,7 +267,7 @@ export default function SpeechTranscriber({
       recorderRef.current = { stream, audioContext, source, processor, chunks, sampleRate: audioContext.sampleRate };
       setIsRecording(true);
     } catch (err) {
-      showAlert?.({ title: "Microphone Failed", message: err.message || String(err), danger: true });
+      showAlert?.({ title: "Ошибка микрофона", message: err.message || String(err), danger: true });
     }
   };
 
@@ -291,7 +291,7 @@ export default function SpeechTranscriber({
     event.target.value = "";
     if (!file) return;
     if (!file.name.toLowerCase().endsWith(".wav")) {
-      showAlert?.({ title: "Unsupported Audio", message: "V1 accepts WAV files only. MP3/WebM/M4A will need the later FFmpeg path.", danger: true });
+      showAlert?.({ title: "Неподдерживаемый формат аудио", message: "V1 принимает только WAV-файлы. MP3/WebM/M4A потребуют установки FFmpeg.", danger: true });
       return;
     }
     setCurrentAudio(file, file.name);
@@ -329,14 +329,14 @@ export default function SpeechTranscriber({
 
       if (transcription?.text?.toLowerCase().includes("foreign language")) {
         showAlert?.({
-          title: "Foreign Language Detected",
-          message: "The loaded model is English-only and cannot transcribe non-English speech. Please download and load a Multilingual model (e.g. Whisper Base Multilingual) from the Model Manager to transcribe this audio.",
+          title: "Обнаружен иностранный язык",
+          message: "Загруженная модель поддерживает только английский и не может расшифровать речь на других языках. Скачайте и загрузите мультиязычную модель (например, Whisper Base Multilingual) через Менеджер моделей.",
           danger: false,
         });
       }
     } catch (err) {
       if (err.name !== "AbortError") {
-        showAlert?.({ title: "Transcription Failed", message: err.message || String(err), danger: true });
+        showAlert?.({ title: "Ошибка расшифровки", message: err.message || String(err), danger: true });
       }
     } finally {
       abortRef.current = null;
@@ -398,7 +398,7 @@ export default function SpeechTranscriber({
                 <option value="auto">Авто (GPU, если установлен)</option>
                 {(status.backends || []).map((backend) => (
                   <option key={backend.key} value={backend.key}>
-                    {backend.label}{backend.installed ? " - installed" : " - missing"}
+                      {backend.label}{backend.installed ? " - установлено" : " - отсутствует"}
                   </option>
                 ))}
               </select>
@@ -541,7 +541,7 @@ export default function SpeechTranscriber({
             {status.ready && (
               <button className="m3-btn m3-btn-error" onClick={() => stopSpeech().then(refresh)}>
                 <Square size={14} />
-                <span>Stop Runtime</span>
+                <span>Остановить рантайм</span>
               </button>
             )}
           </div>

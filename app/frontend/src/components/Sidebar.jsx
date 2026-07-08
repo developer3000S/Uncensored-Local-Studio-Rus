@@ -156,7 +156,7 @@ function Sidebar({
                             alignItems: "center"
                           }}
                           className="sidebar-history-delete"
-                          title="Delete Conversation"
+                          title="Удалить разговор"
                         >
                           <Trash2 size={12} />
                         </button>
@@ -219,7 +219,7 @@ function Sidebar({
               >
                 {speechTranscriptions.length === 0 ? (
                   <div style={{ padding: "8px 12px", fontSize: "0.78rem", color: "var(--md-sys-color-outline)", opacity: 0.8 }}>
-                    No saved transcriptions
+                    Нет сохранённых расшифровок
                   </div>
                 ) : (
                   speechTranscriptions.map((item) => {
@@ -277,7 +277,7 @@ function Sidebar({
                             alignItems: "center"
                           }}
                           className="sidebar-history-delete"
-                          title="Delete Transcription"
+                          title="Удалить расшифровку"
                         >
                           <Trash2 size={12} />
                         </button>
@@ -340,13 +340,13 @@ function Sidebar({
               >
                 {ttsOutputs.length === 0 ? (
                   <div style={{ padding: "8px 12px", fontSize: "0.78rem", color: "var(--md-sys-color-outline)", opacity: 0.8 }}>
-                    No saved audio
+                    Нет сохранённого аудио
                   </div>
                 ) : (
                   ttsOutputs.map((item) => {
                     const itemId = item.filename || item.metadata || item.audioFile;
                     const isActive = selectedTtsOutput && (selectedTtsOutput.filename || selectedTtsOutput.metadata || selectedTtsOutput.audioFile) === itemId;
-                    const title = item.displayName || item.text || item.audioFile || item.filename || "TTS Output";
+                        const title = item.displayName || item.text || item.audioFile || item.filename || "TTS аудио";
                     const date = formatSidebarDate(item.modifiedAt || item.createdAt);
                     return (
                       <div
@@ -398,7 +398,7 @@ function Sidebar({
                             alignItems: "center"
                           }}
                           className="sidebar-history-delete"
-                          title="Delete TTS Output"
+                          title="Удалить TTS аудио"
                         >
                           <Trash2 size={12} />
                         </button>
@@ -415,7 +415,7 @@ function Sidebar({
             onClick={() => setActiveTab("models")}
           >
             <FolderDown size={20} />
-            <span>Model Manager</span>
+            <span>Менеджер моделей</span>
           </div>
 
           <div
@@ -423,7 +423,7 @@ function Sidebar({
             onClick={() => setActiveTab("settings")}
           >
             <Settings size={20} />
-            <span>Settings</span>
+            <span>Настройки</span>
           </div>
         </div>
       </div>

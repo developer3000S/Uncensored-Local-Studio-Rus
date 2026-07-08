@@ -22,10 +22,10 @@ import {
 import { THEMES } from "../themes";
 
 const ASPECT_RATIOS = [
-  { id: "1:1", label: "1:1 Square", width: 512, height: 512, sdxl_width: 1024, sdxl_height: 1024, desc: "Social posts & avatars" },
-  { id: "4:3", label: "4:3 Photo", width: 640, height: 480, sdxl_width: 1152, sdxl_height: 864, desc: "Classic photo look" },
-  { id: "16:9", label: "16:9 Landscape", width: 768, height: 432, sdxl_width: 1216, sdxl_height: 684, desc: "Widescreen landscape" },
-  { id: "9:16", label: "9:16 Portrait", width: 432, height: 768, sdxl_width: 684, sdxl_height: 1216, desc: "Tall phone screen" }
+  { id: "1:1", label: "1:1 Квадрат", width: 512, height: 512, sdxl_width: 1024, sdxl_height: 1024, desc: "Посты и аватарки" },
+  { id: "4:3", label: "4:3 Фото", width: 640, height: 480, sdxl_width: 1152, sdxl_height: 864, desc: "Классический фото стиль" },
+  { id: "16:9", label: "16:9 Пейзаж", width: 768, height: 432, sdxl_width: 1216, sdxl_height: 684, desc: "Широкоформатный пейзаж" },
+  { id: "9:16", label: "9:16 Портрет", width: 432, height: 768, sdxl_width: 684, sdxl_height: 1216, desc: "Высокий экран телефона" }
 ];
 
 const isSD15OrCustomModel = (modelName) => {
@@ -101,9 +101,9 @@ function HardwareTierBadge({ specs }) {
   if (!specs?.tier) return null;
 
   const tierConfig = {
-    high: { icon: "🚀", label: "High-End PC", color: "tier-high", accent: "#22c55e" },
-    mid: { icon: "⚖️", label: "Balanced PC", color: "tier-mid", accent: "#3b82f6" },
-    low: { icon: "🥔", label: "Potato PC", color: "tier-low", accent: "#f59e0b" },
+    high: { icon: "🚀", label: "Мощный ПК", color: "tier-high", accent: "#22c55e" },
+    mid: { icon: "⚖️", label: "Сбалансированный ПК", color: "tier-mid", accent: "#3b82f6" },
+    low: { icon: "🥔", label: "Слабый ПК", color: "tier-low", accent: "#f59e0b" },
   };
 
   const tier = tierConfig[specs.tier] || tierConfig.low;
@@ -126,11 +126,11 @@ function HardwareTierBadge({ specs }) {
         <>
           <div className="hardware-tier-divider" />
           <div className="hardware-tier-chips">
-            <span className="hardware-tier-chip">Ctx: {rec.contextSize}</span>
-            <span className="hardware-tier-chip">Threads: {rec.threads}</span>
+            <span className="hardware-tier-chip">Контекст: {rec.contextSize}</span>
+            <span className="hardware-tier-chip">Потоки: {rec.threads}</span>
             <span className="hardware-tier-chip">KV: {rec.cacheTypeK}</span>
-            <span className="hardware-tier-chip">Batch: {rec.batchSize}</span>
-            <span className="hardware-tier-chip">Profile: {rec.performanceProfile}</span>
+            <span className="hardware-tier-chip">Пакет: {rec.batchSize}</span>
+            <span className="hardware-tier-chip">Профиль: {rec.performanceProfile}</span>
           </div>
         </>
       )}
@@ -190,7 +190,7 @@ function SectionHeader({ icon: Icon, title, count, color, isExpanded, onToggle }
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
         {count && (
-          <span className="settings-section-count">{count} settings</span>
+          <span className="settings-section-count">{count} настроек</span>
         )}
         <ChevronDown
           size={20}
@@ -282,18 +282,18 @@ function Settings({
         await stopLlm();
         setLlmStatus((prev) => ({ ...prev, ready: false, running: false }));
         showAlert({
-          title: "Settings Saved & Applied",
-          message: "Text settings saved successfully. The running text model has been unloaded to apply these changes."
+          title: "Настройки сохранены и применены",
+          message: "Текстовые настройки сохранены. Запущенная текстовая модель была выгружена для применения изменений."
         });
       } else {
         showAlert({
-          title: "Settings Saved",
-          message: "Text settings saved successfully."
+          title: "Настройки сохранены",
+          message: "Текстовые настройки успешно сохранены."
         });
       }
     } catch (err) {
       showAlert({
-        title: "Save Failed",
+        title: "Сохранение не удалось",
         message: err.message || String(err),
         danger: true
       });
@@ -396,7 +396,7 @@ function Settings({
           setBackendDownload((prev) => ({
             ...prev,
             active: false,
-            error: err.message || "Download failed",
+            error: err.message || "Загрузка не удалась",
           }));
         }
       }
@@ -502,7 +502,7 @@ function Settings({
   const handleBenchmarkTextBackend = async () => {
     const model = llmStatus.settings?.model;
     if (!model) {
-      showAlert({ title: "No Text Model Loaded", message: "Load a GGUF text model before benchmarking.", danger: true });
+      showAlert({ title: "Текстовая модель не загружена", message: "Загрузите GGUF текстовую модель перед запуском бенчмарка.", danger: true });
       return;
     }
     setBenchmarkBusy(true);
@@ -514,17 +514,17 @@ function Settings({
       });
       const winner = result.winner;
       showAlert({
-        title: winner ? "Benchmark Complete" : "Benchmark Finished",
+        title: winner ? "Бенчмарк завершён" : "Бенчмарк завершён",
         message: winner
-          ? `Fastest backend: ${winner.backendMode} at ${Number(winner.predicted_per_second || 0).toFixed(1)} tokens/sec.`
-          : "Benchmark finished, but no backend returned usable timing data.",
+          ? `Самый быстрый бэкенд: ${winner.backendMode} — ${Number(winner.predicted_per_second || 0).toFixed(1)} токенов/с.`
+          : "Бенчмарк завершён, но ни один бэкенд не вернул пригодные данные.",
       });
       const [status, backends, stats] = await Promise.all([getLlmStatus(), getLlmBackends(true), getLlmStats()]);
       setLlmStatus(status);
       setLlmBackends(backends);
       setLlmStats(stats);
     } catch (err) {
-      showAlert({ title: "Benchmark Failed", message: err.message || String(err), danger: true });
+      showAlert({ title: "Бенчмарк не удался", message: err.message || String(err), danger: true });
     } finally {
       setBenchmarkBusy(false);
     }
@@ -543,12 +543,12 @@ function Settings({
       return;
     }
 
-    const reload = await showConfirm({
-      title: enabled ? "Reload With DeepThink?" : "Reload Without DeepThink?",
-      message: "Changing DeepThink requires reloading the text model before it affects new replies. Reload now, or skip and keep the currently loaded model as-is?",
-      confirmLabel: "Reload",
-      cancelLabel: "Skip",
-    });
+      const reload = await showConfirm({
+        title: enabled ? "Перезагрузить с DeepThink?" : "Перезагрузить без DeepThink?",
+        message: "Изменение DeepThink требует перезагрузки текстовой модели перед тем, как оно начнёт действовать. Перезагрузить сейчас или пропустить и оставить текущую модель?",
+        confirmLabel: "Перезагрузить",
+        cancelLabel: "Пропустить",
+      });
     if (!reload) return;
 
     try {
@@ -558,7 +558,7 @@ function Settings({
       await startLlm(status.settings.model, buildTextStartOptions(nextSettings));
     } catch (err) {
       await showAlert({
-        title: "Reload Failed",
+        title: "Перезагрузка не удалась",
         message: err.message || String(err),
         danger: true,
       });
@@ -603,12 +603,12 @@ function Settings({
     if (serverRunning && switchesAccelerator) {
       const leavingNpu = currentBackend === "openvino-npu";
       const confirmed = await showConfirm({
-        title: leavingNpu ? "Unload NPU Model?" : "Unload Model?",
+        title: leavingNpu ? "Выгрузить NPU модель?" : "Выгрузить модель?",
         message: leavingNpu
-          ? "The OpenVINO NPU model must be unloaded before switching to the standard backend."
-          : "The active model must be unloaded before switching to the OpenVINO NPU backend.",
-        confirmLabel: "Unload",
-        cancelLabel: "Cancel",
+          ? "Модель OpenVINO NPU должна быть выгружена перед переключением на стандартный бэкенд."
+          : "Активная модель должна быть выгружена перед переключением на OpenVINO NPU.",
+        confirmLabel: "Выгрузить",
+        cancelLabel: "Отмена",
         danger: true,
       });
       if (!confirmed) return;
@@ -619,7 +619,7 @@ function Settings({
         setActiveModel(null);
       } catch (err) {
         await showAlert({
-          title: "Unload Failed",
+          title: "Выгрузка не удалась",
           message: err.message || String(err),
           danger: true,
         });
@@ -650,7 +650,7 @@ function Settings({
         active: true,
         backendId: backend.id,
         progress: 0,
-        speed: "Starting",
+        speed: "Запуск",
         error: null,
       });
       await downloadBackend(backend.id);
@@ -660,11 +660,11 @@ function Settings({
         backendId: backend.id,
         progress: 0,
         speed: "",
-        error: err.message || "Download failed",
+        error: err.message || "Загрузка не удалась",
       });
       await showAlert({
-        title: "Backend Download Failed",
-        message: err.message || "Could not start backend download.",
+        title: "Загрузка бэкенда не удалась",
+        message: err.message || "Не удалось начать загрузку бэкенда.",
         danger: true,
       });
     }
@@ -1575,7 +1575,7 @@ function Settings({
                       <div style={{ width: "26px", height: "26px", borderRadius: "50%", background: t.secondary, border: "2px solid rgba(255,255,255,0.25)", boxShadow: "0 2px 6px rgba(0,0,0,0.15)" }} title="Дополнительный цвет" />
                       <div style={{ width: "26px", height: "26px", borderRadius: "50%", background: t.bg, border: "1.5px solid rgba(0,0,0,0.12)", boxShadow: "inset 0 2px 4px rgba(0,0,0,0.06)" }} title="Фон" />
                       <span style={{ marginLeft: "auto", fontSize: "0.7rem", opacity: 0.6, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em" }}>
-                        {t.type}
+                        {t.type === "dark" ? "Тёмная" : "Светлая"}
                       </span>
                     </div>
                   </button>

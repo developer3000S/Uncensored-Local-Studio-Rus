@@ -370,12 +370,12 @@ fi
 mkdir -p "$BACKEND_DIR"
 
 if [[ "$PLATFORM" == "Darwin" ]]; then
-  print_step 2 $TOTAL_STEPS "Setting up stable-diffusion.cpp Metal backend (app/backend/mac/)"
+  print_step 2 $TOTAL_STEPS "Установка stable-diffusion.cpp Metal бэкенда (app/backend/mac/)"
   if [[ "$ARCH" != "arm64" ]]; then
-    print_fail "The official macOS backend binary is Apple Silicon only (arm64)."
-    print_info "macOS Intel hardware is completely unsupported and has not been tested."
-    exit 1
+    print_warn "В официальном пакете macOS имеется бинарник только для Apple Silicon (arm64). Для Intel macOS используется CPU (без Metal) как запасной вариант." 
+    print_info "Если у вас есть свой Metal-бэкенд для Intel, замените app/backend/mac/sd и перезапустите лаунчер." 
   fi
+
 
   MAC_BACKEND="$BACKEND_DIR/sd"
   if [[ -x "$MAC_BACKEND" ]]; then

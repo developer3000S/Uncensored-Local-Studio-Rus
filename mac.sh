@@ -11,7 +11,7 @@ APP_DIR="$SCRIPT_DIR/app"
 PLATFORM="$(uname -s)"
 
 if [[ "$PLATFORM" != "Darwin" ]]; then
-  echo "[ERROR] This script is for macOS only. Please run ./linux.sh on Linux." >&2
+  echo "[ОШИБКА] Этот скрипт предназначен только для macOS. На Linux используйте ./linux.sh." >&2
   exit 1
 fi
 

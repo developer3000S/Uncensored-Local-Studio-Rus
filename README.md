@@ -1,6 +1,214 @@
 #  Uncensored AI Studio
 
 <p align="center">
+  <strong>Премиум, полностью офлайн, локальная AI студия и GUI без конфигурации для Stable Diffusion (генерация изображений), LLM (чат), Whisper (распознавание речи) и Kokoro (текст‑в‑речь). Работает с ускорением GPU и NPU на Windows, Linux и macOS.</strong>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Offline-100%25-green?style=for-the-badge&logo=offline" alt="100% Offline" />
+  <img src="https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-blue?style=for-the-badge" alt="Platforms" />
+  <img src="https://img.shields.io/badge/License-MIT-orange?style=for-the-badge" alt="License" />
+</p>
+
+<p align="center">
+  🎥 <strong>Смотрите видео-демо и инструкцию:</strong> <a href="https://youtu.be/qvamkqmLPn8">https://youtu.be/qvamkqmLPn8</a>
+</p>
+
+<p align="center">
+  <a href="https://youtu.be/qvamkqmLPn8">
+    <img src="https://img.youtube.com/vi/qvamkqmLPn8/maxresdefault.jpg" alt="Uncensored AI Studio Video Tutorial" width="800" style="border-radius: 8px;" />
+  </a>
+</p>
+
+---
+
+## 📖 Оглавление
+* [Что такое Uncensored AI Studio?](#what-is-uncensored-ai-studio)
+* [Ключевые возможности](#key-features)
+* [Архитектура рабочего пространства и движка](#workspace-architecture)
+* [Поддерживаемые модели](#supported-models)
+* [Структура папок](#folder-architecture)
+* [Начало работы](#getting-started)
+  * [Установка на Windows](#windows-setup)
+  * [Установка на Linux](#linux-setup)
+  * [Установка на macOS](#macos-setup)
+* [Совместимость с оборудованием и ускорение](#hardware-compatibility-acceleration)
+* [Устранение проблем и FAQ](#troubleshooting-faq)
+* [Сборка из исходников](#building-from-source)
+* [Лицензирование](#licensing)
+
+---
+
+## 📖 Что такое Uncensored AI Studio?
+
+**Uncensored AI Studio** – полностью офлайн, без‑настройки, автономная AI‑студия для Windows, Linux и macOS. В отличие от облачных сервисов, она работает полностью на вашем железе без цензуры, слежения, подписок и входа в аккаунт.
+
+Она объединяет четыре основные локальные возможности AI в одном высокопроизводительном настольном интерфейсе:
+1. **🎨 Генерация изображений (Stable Diffusion)** – создавайте и редактируйте изображения офлайн, используя веса моделей `.safetensors`, `.gguf` или `.ckpt`.
+2. **💬 Текстовый чат (LLM)** – приватно общайтесь с открытыми языковыми моделями (формат GGUF) через официальный высокопроизводительный бекенд `llama.cpp`.
+3. **🎙️ Распознавание речи (Whisper)** – в реальном времени транскрибируйте голосовые записи через встроенный движок `whisper.cpp`.
+4. **🗣️ Текст‑в‑речь (Kokoro TTS)** – конвертируйте ответы в естественный голос с помощью модели `Kokoro-82M` в формате ONNX.
+
+---
+
+## 🌟 Ключевые возможности
+
+* **100 % офлайн & приватно** – все инференсы выполняются локально. Нет интернета, телеметрии, облачных логов и ключей API.
+* **Портативность без установки** – весь runtime (Node.js, модели, GPU‑бэкенды) включён в папку проекта. Не меняет системные окружения.
+* **Авто‑настройка ускорения** – скрипт автоматически определяет оборудование и загружает CUDA (Nvidia), ROCm (AMD), Vulkan (Intel/AMD/NVIDIA), Metal (macOS) или OpenVINO (Intel NPU) бэкенды.
+* **Встроенный менеджер моделей** – вставьте URL Hugging Face для скачивания весов или перетащите файлы в папку `app/models/`.
+* **Мониторинг производительности в реальном времени** – показывается загрузка CPU, RAM, GPU и VRAM прямо в веб‑интерфейсе.
+* **Локальная галерея выводов** – сохраняет изображения вместе с параметрами подсказки и JSON‑метаданными.
+
+---
+
+## ⚙️ Архитектура рабочего пространства & движка
+
+Чтобы не исчерпывать системную RAM/VRAM, движки изображений и текста работают взаимно‑исключающимся образом. Переключать их можно в UI:
+* **Рабочее место генерации изображений** – отдельный бекенд `stable-diffusion.cpp`.
+* **Рабочее место чата** – сервер `llama.cpp`. По умолчанию загружается небольшая стартовая модель Qwen2.5 Coder.
+* **Рабочий процесс Whisper** – локальный процесс `whisper-cli`.
+* **Рабочий процесс Kokoro TTS** – локальная библиотека `kokoro-js`.
+
+---
+
+## 📁 Структура папок
+
+```
+Uncensored-AI-Studio/
+├── windows.bat                # Запуск на Windows (двойной клик)
+├── linux.sh                   # Запуск на Linux (терминал)
+├── mac.sh                     # Запуск на macOS (терминал)
+├── LICENSE                    # MIT лицензия
+├── .gitignore                 # Исключает модели и выводы из VCS
+├── README.md                  # Документация проекта
+├── scripts/
+│   ├── setup/                 # Скрипты установки платформ и бекендов
+│   ├── reset/                 # Очистка и восстановление окружения
+│   ├── server/                # Управление веб‑сервером и процессами
+│   ├── workers/               # Локальные воркеры
+│   ├── build/                 # Помощники сборки из исходников
+│   └── config/                # Конфигурационные каталоги
+└── app/
+    ├── frontend/              # Исходный код UI (Vite + React)
+    ├── models/                # Весы изображений (.safetensors, .gguf, .ckpt)
+    ├── llm-models/            # Весы текстовых моделей GGUF
+    └── outputs/               # Сохранённые изображения и метаданные
+```
+
+---
+
+## 🚀 Начало работы
+
+Убедитесь, что у вас установлен современный веб‑браузер. Выберите свою платформу ниже:
+
+### Установка на Windows
+1. **Запуск:** Дважды кликните `windows.bat`.
+   > **Примечание:** При первом запуске скрипт автоматически скачает портативный Node.js и настроит пред‑сборные GPU/CPU бекенды.
+2. **Добавление моделей:** Поместите файлы `.safetensors`, `.gguf` или `.ckpt` в `app/models/` (или скачайте их через вкладку **Model Manager** в UI).
+3. **Генерация:** Откройте `http://localhost:1420` в браузере, выберите модель и введите подсказку.
+
+### Установка на Linux
+1. **Сделайте скрипт исполняемым:**
+   ```bash
+   chmod +x linux.sh
+   ```
+2. **Запуск:** `./linux.sh`.
+   - **Пользователи NVIDIA:** предложит установить бэкенд **CUDA**.
+   - **AMD Radeon:** `./linux.sh --max-perf` добавит бэкенд **ROCm**.
+   - **Intel Core Ultra NPU:** `./linux.sh --setup-openvino` настроит поддержку Intel NPU.
+3. **Добавление моделей:** как выше.
+4. **Генерация:** открыть `http://localhost:1420`.
+
+### Установка на macOS
+1. **Сделайте скрипт исполняемым:**
+   ```bash
+   chmod +x mac.sh
+   ```
+2. **Запуск:** `./mac.sh`.
+   > **Важно:** Предварительно собранный бэкенд macOS оптимизирован для **Apple Silicon (M1 и новее)** и использует **Metal**. Теперь поддерживается **Intel macOS (x86_64)** через OpenVINO. Скрипт автоматически определит архитектуру и выберет соответствующий бекенд.
+3. **Добавление моделей:** как выше.
+4. **Генерация:** открыть `http://localhost:1420`.
+
+---
+
+## 🖥️ Совместимость с оборудованием & ускорение
+
+### Windows
+| Вендор GPU | Технология | Статус | Примечание |
+|---|---|---|---|
+| **Nvidia** | CUDA | ✅ Нативно | Использует `sd-cuda.exe` с оптимизациями SDK 12. |
+| **AMD Radeon** | Vulkan | ✅ Нативно | `sd-vulkan.exe` использует Vulkan. |
+| **Intel Arc** | Vulkan | ✅ Нативно | `sd-vulkan.exe` для Intel. |
+| **Интегрированный / без GPU** | CPU | ⚠️ Фолбэк | Запуск на CPU‑потоках (медленно). |
+
+### Linux
+| Вендор GPU | Основной бекенд | Фолбэк | Примечание |
+|---|---|---|---|
+| **NVIDIA** | CUDA / Vulkan | Vulkan / CPU | Авто‑детект. При отсутствии CUDA скачивает пред‑сборный бинарник или компилирует из исходников. |
+| **AMD Radeon** | ROCm | Vulkan | ROCm даёт лучшую производительность при наличии драйверов. |
+| **Intel Arc / интегрированный** | Vulkan | CPU | Кросс‑вендорная поддержка Vulkan. |
+| **Intel Core Ultra NPU** | OpenVINO NPU | CPU | Требует драйвер Intel NPU, ядро 6.6+, Python 3 и `./linux.sh --setup-openvino`. |
+| **Интегрированный / без GPU** | CPU | — | Запуск на CPU. |
+
+### macOS
+| Оборудование | Основной бекенд | Фолбэк | Примечание |
+|---|---|---|---|
+| **Apple Silicon (M1 и новее)** | Metal | CPU | Официальный бекенд `stable-diffusion.cpp` для arm64.
+| **Intel macOS (x86_64)** | OpenVINO | CPU | Новый бэкенд использует OpenVINO для ускорения на Intel CPU/NPU. |
+
+---
+
+## 🛠️ Устранение проблем & FAQ
+
+<details>
+  <summary><strong>Сброс окружения</strong></summary>
+  <p>Запустите <code>scripts/reset/reset.ps1</code> (Windows) или <code>scripts/reset/reset.sh</code> (Linux/macOS). Это очистит временные кэши сборки и пакетов, но сохранит модели и выводы.</p>
+</details>
+
+<details>
+  <summary><strong>Ошибка GLIBC_2.38 на Linux</strong></summary>
+  <p>Пред‑сборные бинарники требуют glibc 2.38+. Обновите ОС или соберите бекенд из исходников (см. раздел «Сборка из исходников»).</p>
+</details>
+
+<details>
+  <summary><strong>Конфликт портов</strong></summary>
+  <p>UI использует порт 1420, бекенд – 8080. При конфликте скрипт автоматически ищет свободный порт в диапазоне 1421‑1499.</p>
+</details>
+
+---
+
+## 🔨 Сборка из исходников
+
+Скрипт `scripts/setup/setup.sh` автоматически собирает CUDA‑бэкенд из исходников при выборе. Чтобы собрать все бекенды вручную, выполните `scripts/build/build_from_source.sh`.
+
+### macOS
+Для macOS скрипт собирает Metal‑бэкенд и копирует его в `app/backend/mac/sd`. **Новый Intel‑бэкенд** собирается командой:
+```bash
+cd stable-diffusion.cpp
+mkdir build && cd build
+cmake .. -DSD_OPENVINO=ON -DSD_BUILD_SHARED_LIBS=ON -DCMAKE_BUILD_TYPE=Release
+cmake --build . --config Release -j$(sysctl -n hw.ncpu)
+cp bin/sd-openvino /path/to/Uncensored-AI-Studio/app/backend/mac/openvino/sd
+```
+После копирования переименуйте бинарник в `sd`.
+
+### Требования
+* `git`, `cmake`, `make` (или `ninja`) и компилятор C++17 (`g++`/`clang++`).
+* **CUDA**: набор инструментов NVIDIA (`nvcc`) в `PATH`.
+* **Vulkan**: SDK/loader и совместимый драйвер.
+* **ROCm**: библиотеки разработки AMD.
+* **macOS Metal**: Xcode Command Line Tools.
+* **OpenVINO** (для Intel macOS): установить SDK с официального сайта Intel.
+
+---
+
+## 📝 Лицензия
+
+Проект лицензирован под MIT License – см. файл [LICENSE](LICENSE). Включены библиотеки [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp) (MIT). Модели подчиняются лицензиям их создателей.
+
+
+<p align="center">
   <strong>A premium, zero-configuration local AI studio and offline GUI for Stable Diffusion (Image Generation), LLMs (Chat), Whisper (Speech-to-Text), and Kokoro (Text-to-Speech). Powered by hardware-accelerated GPU and NPU execution on Windows, Linux, and macOS.</strong>
 </p>
 

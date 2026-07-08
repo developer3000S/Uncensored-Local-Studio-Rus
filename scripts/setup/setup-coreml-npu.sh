@@ -54,9 +54,10 @@ if [[ "$(uname -s)" != "Darwin" ]]; then
 fi
 
 if [[ "$(uname -m)" != "arm64" ]]; then
-  echo "  [ERROR] CoreML NPU support requires Apple Silicon (M1/M2/M3/M4/etc. arm64)." >&2
+  echo "  [ОШИБКА] Поддержка CoreML NPU доступна только на Apple Silicon (arm64). На Intel macOS этот режим недоступен." >&2
   exit 1
 fi
+
 
 SETUP_PYTHON="$(find_coreml_python || true)"
 if [[ -z "$SETUP_PYTHON" ]]; then
