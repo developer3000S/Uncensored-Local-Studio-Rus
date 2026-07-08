@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 #
-# Uncensored AI Studio - macOS Launcher
-# Double-click or run: ./mac.sh
+# Неприметная AI Studio — лаунчер для macOS
+# Двойной клик или запуск: ./mac.sh
 #
+
 
 set -euo pipefail
 
@@ -13,6 +14,7 @@ PLATFORM="$(uname -s)"
 if [[ "$PLATFORM" != "Darwin" ]]; then
 echo "  [ОШИБКА] Этот скрипт предназначен только для macOS. На Linux запустите ./linux.sh." >&2
   exit 1
+
 fi
 
 NODE_DIR="$APP_DIR/tools/node-mac"
@@ -68,7 +70,8 @@ resolve_frontend_port() {
     fi
   done
 
-  echo "[ERROR] No free frontend port found. Tried $preferred and 1421-1499." >&2
+  echo "[ОШИБКА] Не найден свободный порт для фронтенда. Пробовал $preferred и диапазон 1421-1499." >&2
+
   return 1
 }
 
@@ -161,21 +164,24 @@ if [[ -n "$SETUP_REASON" ]]; then
   echo ""
   echo "  ============================================================"
   echo "   UNCENSORED AI STUDIO      |  $PLATFORM_LABEL $SETUP_MODE"
+
   echo "  ============================================================"
   echo ""
   if [[ "$SETUP_MODE" == "First-Time Setup" ]]; then
     echo "  Похоже, это первый запуск на macOS. Выполняю настройку автоматически..."
   else
-    echo "  Uncensored AI Studio требуется быстрое восстановление перед запуском."
+    echo "  Нужна быстрая проверка и восстановление перед запуском."
   fi
+
   echo "  Причина: $SETUP_REASON"
   echo "  Во время настройки модели не загружаются. Загрузите их или импортируйте в приложении."
   echo ""
   read -rp "  Нажмите Enter, чтобы продолжить, или Ctrl+C чтобы отменить."
 
-  # Clear managed backend ports before setup. Do not kill the frontend port;
-  # launch will select a free frontend port automatically.
+  # Очищаю порты управляемого бэкенда перед настройкой.
+  # Порт фронтенда трогать не нужно — лаунчер сам выберет свободный порт.
   if command -v lsof >/dev/null 2>&1; then
+
     lsof -t -i:8080 -i:"${LLM_PORT}" | xargs kill -9 >/dev/null 2>&1 || true
   elif command -v fuser >/dev/null 2>&1; then
     fuser -k "8080/tcp" >/dev/null 2>&1 || true
@@ -190,8 +196,10 @@ if [[ -n "$SETUP_REASON" ]]; then
   fi
 fi
 
-# ── Launch ─────────────────────────────────────────────────────────────────
+# ── Запуск ────────────────────────────────────────────────────────────────
 clear 2>/dev/null || true
+
+
 echo ""
 echo "  ============================================================"
 echo "   UNCENSORED AI STUDIO      |  Запуск..."
@@ -204,8 +212,9 @@ if [[ "$FRONTEND_PORT" != "$REQUESTED_FRONTEND_PORT" ]]; then
     echo "  Порт фронтенда ${REQUESTED_FRONTEND_PORT} занят; используется ${FRONTEND_PORT}."
 fi
 
-# Clear managed backend ports
-if command -v lsof >/dev/null 2>&1; then
+  # Очищаю порты управляемого бэкенда
+  if command -v lsof >/dev/null 2>&1; then
+
   lsof -t -i:8080 -i:"${LLM_PORT}" | xargs kill -9 >/dev/null 2>&1 || true
 elif command -v fuser >/dev/null 2>&1; then
   fuser -k "8080/tcp" >/dev/null 2>&1 || true
@@ -248,13 +257,17 @@ echo ""
 # Cleanup on exit
 cleanup() {
   echo ""
-  echo "  Shutting down..."
+  echo "  Завершаю работу..."
+
+
   if kill -0 "$SERVER_PID" >/dev/null 2>&1; then
     kill -TERM "$SERVER_PID" >/dev/null 2>&1 || true
     sleep 1
     kill -KILL "$SERVER_PID" >/dev/null 2>&1 || true
   fi
-  echo "  Done. Goodbye!"
+  echo "  Готово. До свидания!"
+
+
   exit 0
 }
 trap cleanup SIGINT SIGTERM
