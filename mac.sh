@@ -11,7 +11,7 @@ APP_DIR="$SCRIPT_DIR/app"
 PLATFORM="$(uname -s)"
 
 if [[ "$PLATFORM" != "Darwin" ]]; then
-  echo "[ERROR] This script is intended for macOS only. Use ./linux.sh on Linux." >&2
+echo "  [ОШИБКА] Этот скрипт предназначен только для macOS. На Linux запустите ./linux.sh." >&2
   exit 1
 fi
 
@@ -164,14 +164,14 @@ if [[ -n "$SETUP_REASON" ]]; then
   echo "  ============================================================"
   echo ""
   if [[ "$SETUP_MODE" == "First-Time Setup" ]]; then
-    echo "  This looks like your first run on macOS. Setting up automatically..."
+    echo "  Похоже, это первый запуск на macOS. Выполняю настройку автоматически..."
   else
-    echo "  Uncensored AI Studio needs a quick repair before launch."
+    echo "  Uncensored AI Studio требуется быстрое восстановление перед запуском."
   fi
-  echo "  Reason: $SETUP_REASON"
-  echo "  Models are not downloaded during setup. Download or import them in the app."
+  echo "  Причина: $SETUP_REASON"
+  echo "  Во время настройки модели не загружаются. Загрузите их или импортируйте в приложении."
   echo ""
-  read -rp "  Press Enter to continue, or Ctrl+C to cancel."
+  read -rp "  Нажмите Enter, чтобы продолжить, или Ctrl+C чтобы отменить."
 
   # Clear managed backend ports before setup. Do not kill the frontend port;
   # launch will select a free frontend port automatically.
@@ -184,8 +184,8 @@ if [[ -n "$SETUP_REASON" ]]; then
 
   if ! bash "$SETUP_SCRIPT"; then
     echo ""
-    echo "  [ERROR] Setup failed. Please check the output above."
-    read -rp "  Press Enter to close..."
+    echo "  [ОШИБКА] Не удалось выполнить настройку. Проверьте вывод выше."
+    read -rp "  Нажмите Enter, чтобы закрыть..."
     exit 1
   fi
 fi
@@ -194,14 +194,14 @@ fi
 clear 2>/dev/null || true
 echo ""
 echo "  ============================================================"
-echo "   UNCENSORED AI STUDIO      |  Launching..."
+echo "   UNCENSORED AI STUDIO      |  Запуск..."
 echo "  ============================================================"
 echo ""
 
 REQUESTED_FRONTEND_PORT="$FRONTEND_PORT"
 FRONTEND_PORT="$(resolve_frontend_port "$REQUESTED_FRONTEND_PORT")"
 if [[ "$FRONTEND_PORT" != "$REQUESTED_FRONTEND_PORT" ]]; then
-  echo "  Frontend port ${REQUESTED_FRONTEND_PORT} is busy; using ${FRONTEND_PORT} instead."
+    echo "  Порт фронтенда ${REQUESTED_FRONTEND_PORT} занят; используется ${FRONTEND_PORT}."
 fi
 
 # Clear managed backend ports
@@ -213,7 +213,7 @@ elif command -v fuser >/dev/null 2>&1; then
 fi
 
 # Start the server
-echo "  Starting Uncensored AI Studio..."
+echo "  Запуск Uncensored AI Studio..."
 export PATH="$NODE_DIR/bin:$PATH"
 export FRONTEND_PORT="$FRONTEND_PORT"
 
@@ -226,22 +226,22 @@ sleep 2
 
 # Open browser
 if command -v open >/dev/null 2>&1; then
-  echo "  Opening browser at http://localhost:${FRONTEND_PORT}"
+  echo "  Открываю браузер: http://localhost:${FRONTEND_PORT}"
   open "http://localhost:${FRONTEND_PORT}" >/dev/null 2>&1 &
 else
-  echo "  Open your browser to: http://localhost:${FRONTEND_PORT}"
+  echo "  Откройте браузер по адресу: http://localhost:${FRONTEND_PORT}"
 fi
 
 echo ""
 echo "  ============================================================"
-echo "   Running!"
+echo "   Запущено!"
 echo "   Web UI:     http://localhost:${FRONTEND_PORT}"
-echo "   GPU API:    Auto-selected by the app (starts at 8080)"
-echo "   Text API:   Starts when a GGUF model is loaded (port ${LLM_PORT})"
-echo "   Speech:     Managed locally by the app"
-echo "   TTS:        Managed locally by the app"
+echo "   API GPU:    Автовыбор приложением (стартует с 8080)"
+echo "   Text API:   Запускается при загрузке модели GGUF (порт ${LLM_PORT})"
+echo "   Speech:     Управляется локально приложением"
+echo "   TTS:        Управляется локально приложением"
 echo ""
-echo "   Press Ctrl+C in this window to stop all services."
+echo "   Нажмите Ctrl+C в этом окне, чтобы остановить все службы."
 echo "  ============================================================"
 echo ""
 
