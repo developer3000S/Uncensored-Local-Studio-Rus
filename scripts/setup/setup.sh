@@ -247,16 +247,93 @@ check_linux_runtime_abi() {
   fi
 
   if [[ $unsupported -ne 0 ]]; then
-    print_info "CyberRealistic and other valid models will fail before loading on this OS because the backend binary cannot start."
-    print_info "Fix: use Ubuntu 24.04+, Fedora 40+, another glibc 2.38+ distro, or build stable-diffusion.cpp from source on this machine."
+    print_info "CyberRealistic and other valid models will fail before loading on this OS because the prebuilt backend binary cannot start."
+    print_info "Fix: use Ubuntu 24.04+, Fedora 40+, another glibc 2.38+ distro, or compile backends from source."
     if [[ "${UAIS_ALLOW_UNSUPPORTED_LINUX:-0}" == "1" ]]; then
       print_warn "Continuing anyway because UAIS_ALLOW_UNSUPPORTED_LINUX=1 is set."
       return 0
     fi
-    return 1
+    if command -v gcc >/dev/null 2>&1 && \
+       command -v g++ >/dev/null 2>&1 && \
+       command -v cmake >/dev/null 2>&1 && \
+       command -v make >/dev/null 2>&1 && \
+       command -v git >/dev/null 2>&1; then
+      print_warn "Compilation tools (gcc, g++, cmake, make, git) are available."
+      print_info "Enabling automatic compilation from source for all backends..."
+      export UAIS_FORCE_COMPILE=1
+      return 0
+    else
+      print_fail "Build tools (gcc, g++, cmake, make, git) are not fully installed."
+      print_fail "To compile from source, run: sudo apt install build-essential cmake git"
+      return 1
+    fi
   fi
 
   print_ok "Linux runtime ABI ready: glibc $current_glibc, GLIBCXX_$current_glibcxx"
+}
+
+build_sd_from_source() {
+  local backend="$1" # "cpu" or "vulkan"
+  local dest_dir="$2"
+  local main_name="$3"
+  local server_name="$4"
+
+  print_info "Building stable-diffusion.cpp $backend backend from source..."
+  local BUILD_DIR="/tmp/uais-build-sd"
+  local JOBS="$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)"
+  
+  if [[ ! -d "$BUILD_DIR" ]]; then
+    print_info "Cloning stable-diffusion.cpp..."
+    git clone --depth 1 --branch "$SD_RELEASE" https://github.com/leejet/stable-diffusion.cpp.git "$BUILD_DIR" || {
+      git clone https://github.com/leejet/stable-diffusion.cpp.git "$BUILD_DIR"
+      cd "$BUILD_DIR"
+      git checkout -f "$SD_RELEASE"
+    }
+  fi
+  
+  local PUSHED_DIR="$(pwd)"
+  cd "$BUILD_DIR"
+  git submodule update --init --recursive --depth 1 || git submodule update --init --recursive
+  
+  local build_subdir="build-$backend"
+  rm -rf "$build_subdir" && mkdir "$build_subdir" && cd "$build_subdir"
+  
+  local cmake_flags="-DSD_BUILD_SHARED_LIBS=ON -DCMAKE_BUILD_TYPE=Release"
+  if [[ "$backend" == "vulkan" ]]; then
+    cmake_flags="$cmake_flags -DSD_VULKAN=ON"
+  fi
+  
+  print_info "Running cmake for $backend backend..."
+  if cmake .. $cmake_flags && cmake --build . --config Release -j"$JOBS"; then
+    mkdir -p "$dest_dir"
+    if [[ -f bin/sd-server ]]; then
+      cp bin/sd-server "$dest_dir/$server_name"
+    else
+      print_fail "Build succeeded but bin/sd-server was not found."
+      cd "$PUSHED_DIR"
+      return 1
+    fi
+    
+    if [[ -f bin/sd ]]; then
+      cp bin/sd "$dest_dir/$main_name"
+    elif [[ -f bin/sd-cli ]]; then
+      cp bin/sd-cli "$dest_dir/$main_name"
+    fi
+    
+    local SO_PATH=$(find . -name "libstable-diffusion.so" | head -n 1)
+    if [[ -n "$SO_PATH" ]]; then
+      cp "$SO_PATH" "$dest_dir/"
+    fi
+    
+    chmod +x "$dest_dir/$server_name" "$dest_dir/$main_name" 2>/dev/null || true
+    print_ok "stable-diffusion.cpp $backend backend compiled and installed successfully from source."
+    cd "$PUSHED_DIR"
+    return 0
+  else
+    print_fail "stable-diffusion.cpp $backend backend build from source failed."
+    cd "$PUSHED_DIR"
+    return 1
+  fi
 }
 
 copy_binaries_from_extracted() {
@@ -419,14 +496,18 @@ else
 # CPU backend (always)
 CPU_BACKEND_DIR="$BACKEND_DIR/cpu"
 if [[ ! -f "$CPU_BACKEND_DIR/sd-cpu" || ! -f "$CPU_BACKEND_DIR/sd-server-cpu" ]]; then
-  mkdir -p "$CPU_BACKEND_DIR"
-  CPU_ZIP="$TOOLS_DIR/sd-cpu.zip"
-  download_file "$SD_BASE_URL/sd-master-${SD_SHORT_HASH}-bin-Linux-Ubuntu-24.04-x86_64.zip" "$CPU_ZIP" "stable-diffusion.cpp CPU Backend (Linux x86_64)"
-  extract_zip "$CPU_ZIP" "$CPU_BACKEND_DIR/extracted" "CPU Backend"
-  rm -f "$CPU_ZIP"
-  copy_binaries_from_extracted "$CPU_BACKEND_DIR/extracted" "$CPU_BACKEND_DIR" "sd-cpu" "sd-server-cpu"
-  rm -rf "$CPU_BACKEND_DIR/extracted"
-  print_ok "CPU backend installed."
+  if [[ "${UAIS_FORCE_COMPILE:-0}" == "1" ]]; then
+    build_sd_from_source cpu "$CPU_BACKEND_DIR" "sd-cpu" "sd-server-cpu"
+  else
+    mkdir -p "$CPU_BACKEND_DIR"
+    CPU_ZIP="$TOOLS_DIR/sd-cpu.zip"
+    download_file "$SD_BASE_URL/sd-master-${SD_SHORT_HASH}-bin-Linux-Ubuntu-24.04-x86_64.zip" "$CPU_ZIP" "stable-diffusion.cpp CPU Backend (Linux x86_64)"
+    extract_zip "$CPU_ZIP" "$CPU_BACKEND_DIR/extracted" "CPU Backend"
+    rm -f "$CPU_ZIP"
+    copy_binaries_from_extracted "$CPU_BACKEND_DIR/extracted" "$CPU_BACKEND_DIR" "sd-cpu" "sd-server-cpu"
+    rm -rf "$CPU_BACKEND_DIR/extracted"
+    print_ok "CPU backend installed."
+  fi
 else
   print_ok "CPU backend already ready."
 fi
@@ -435,14 +516,18 @@ chmod +x "$CPU_BACKEND_DIR/sd-cpu" "$CPU_BACKEND_DIR/sd-server-cpu" 2>/dev/null 
 # Vulkan backend (always - cross-vendor GPU fallback)
 VULKAN_BACKEND_DIR="$BACKEND_DIR/vulkan"
 if [[ ! -f "$VULKAN_BACKEND_DIR/sd-vulkan" || ! -f "$VULKAN_BACKEND_DIR/sd-server-vulkan" ]]; then
-  mkdir -p "$VULKAN_BACKEND_DIR"
-  VULKAN_ZIP="$TOOLS_DIR/sd-vulkan.zip"
-  download_file "$SD_BASE_URL/sd-master-${SD_SHORT_HASH}-bin-Linux-Ubuntu-24.04-x86_64-vulkan.zip" "$VULKAN_ZIP" "stable-diffusion.cpp Vulkan Backend (Linux x86_64)"
-  extract_zip "$VULKAN_ZIP" "$VULKAN_BACKEND_DIR/extracted" "Vulkan Backend"
-  rm -f "$VULKAN_ZIP"
-  copy_binaries_from_extracted "$VULKAN_BACKEND_DIR/extracted" "$VULKAN_BACKEND_DIR" "sd-vulkan" "sd-server-vulkan"
-  rm -rf "$VULKAN_BACKEND_DIR/extracted"
-  print_ok "Vulkan backend installed."
+  if [[ "${UAIS_FORCE_COMPILE:-0}" == "1" ]]; then
+    build_sd_from_source vulkan "$VULKAN_BACKEND_DIR" "sd-vulkan" "sd-server-vulkan" || true
+  else
+    mkdir -p "$VULKAN_BACKEND_DIR"
+    VULKAN_ZIP="$TOOLS_DIR/sd-vulkan.zip"
+    download_file "$SD_BASE_URL/sd-master-${SD_SHORT_HASH}-bin-Linux-Ubuntu-24.04-x86_64-vulkan.zip" "$VULKAN_ZIP" "stable-diffusion.cpp Vulkan Backend (Linux x86_64)"
+    extract_zip "$VULKAN_ZIP" "$VULKAN_BACKEND_DIR/extracted" "Vulkan Backend"
+    rm -f "$VULKAN_ZIP"
+    copy_binaries_from_extracted "$VULKAN_BACKEND_DIR/extracted" "$VULKAN_BACKEND_DIR" "sd-vulkan" "sd-server-vulkan"
+    rm -rf "$VULKAN_BACKEND_DIR/extracted"
+    print_ok "Vulkan backend installed."
+  fi
 else
   print_ok "Vulkan backend already ready."
 fi
@@ -493,28 +578,34 @@ if [[ "$VENDOR" == "nvidia" ]]; then
     
     if [[ "$CHOOSE_CUDA" =~ ^[Yy]$ ]]; then
       TRY_DOWNLOAD=1
-      PREBUILT_URL="https://github.com/leaxer-ai/leaxer-stable-diffusion/releases/download/v0.1.0/sd-server-x86_64-unknown-linux-gnu-cuda"
-      PREBUILT_CLI_URL="https://github.com/leaxer-ai/leaxer-stable-diffusion/releases/download/v0.1.0/sd-x86_64-unknown-linux-gnu-cuda"
+      if [[ "${UAIS_FORCE_COMPILE:-0}" == "1" ]]; then
+        TRY_DOWNLOAD=0
+      fi
       
-      mkdir -p "$CUDA_BACKEND_DIR"
-      
-      print_info "Attempting to download prebuilt CUDA binary..."
-      if download_file "$PREBUILT_URL" "$CUDA_BACKEND_DIR/sd-server-cuda" "Prebuilt Linux CUDA Server" && \
-         download_file "$PREBUILT_CLI_URL" "$CUDA_BACKEND_DIR/sd-cuda" "Prebuilt Linux CUDA CLI"; then
+      if [[ $TRY_DOWNLOAD -eq 1 ]]; then
+        PREBUILT_URL="https://github.com/leaxer-ai/leaxer-stable-diffusion/releases/download/v0.1.0/sd-server-x86_64-unknown-linux-gnu-cuda"
+        PREBUILT_CLI_URL="https://github.com/leaxer-ai/leaxer-stable-diffusion/releases/download/v0.1.0/sd-x86_64-unknown-linux-gnu-cuda"
         
-        chmod +x "$CUDA_BACKEND_DIR/sd-server-cuda" "$CUDA_BACKEND_DIR/sd-cuda" 2>/dev/null || true
+        mkdir -p "$CUDA_BACKEND_DIR"
         
-        print_info "Testing downloaded prebuilt CUDA binary..."
-        if "$CUDA_BACKEND_DIR/sd-server-cuda" --help >/dev/null 2>&1; then
-          print_ok "Prebuilt CUDA binary verified and works! Skipping compilation."
-          TRY_DOWNLOAD=0
+        print_info "Attempting to download prebuilt CUDA binary..."
+        if download_file "$PREBUILT_URL" "$CUDA_BACKEND_DIR/sd-server-cuda" "Prebuilt Linux CUDA Server" && \
+           download_file "$PREBUILT_CLI_URL" "$CUDA_BACKEND_DIR/sd-cuda" "Prebuilt Linux CUDA CLI"; then
+          
+          chmod +x "$CUDA_BACKEND_DIR/sd-server-cuda" "$CUDA_BACKEND_DIR/sd-cuda" 2>/dev/null || true
+          
+          print_info "Testing downloaded prebuilt CUDA binary..."
+          if "$CUDA_BACKEND_DIR/sd-server-cuda" --help >/dev/null 2>&1; then
+            print_ok "Prebuilt CUDA binary verified and works! Skipping compilation."
+            TRY_DOWNLOAD=0
+          else
+            print_warn "Prebuilt CUDA binary failed verification test (missing libraries or library mismatch)."
+            rm -f "$CUDA_BACKEND_DIR/sd-server-cuda" "$CUDA_BACKEND_DIR/sd-cuda"
+          fi
         else
-          print_warn "Prebuilt CUDA binary failed verification test (missing libraries or library mismatch)."
+          print_warn "Failed to download prebuilt CUDA binary."
           rm -f "$CUDA_BACKEND_DIR/sd-server-cuda" "$CUDA_BACKEND_DIR/sd-cuda"
         fi
-      else
-        print_warn "Failed to download prebuilt CUDA binary."
-        rm -f "$CUDA_BACKEND_DIR/sd-server-cuda" "$CUDA_BACKEND_DIR/sd-cuda"
       fi
       
       if [[ $TRY_DOWNLOAD -eq 1 ]]; then

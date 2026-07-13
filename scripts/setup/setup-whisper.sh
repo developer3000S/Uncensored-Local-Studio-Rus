@@ -89,6 +89,92 @@ install_macos_whisper_from_homebrew() {
   return 1
 }
 
+build_whisper_from_source() {
+  local backend="$1" # "cpu" or "vulkan"
+  local dest_dir="$2"
+  
+  if [[ -x "$dest_dir/whisper-cli" ]]; then
+    echo "   OK   whisper.cpp backend already ready (from source): $dest_dir"
+    return 0
+  fi
+
+  echo "   >>   Building whisper.cpp $backend backend from source..."
+  local BUILD_DIR="/tmp/uais-build-whisper"
+  local JOBS="$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)"
+  
+  if [[ ! -d "$BUILD_DIR" ]]; then
+    echo "   >>   Cloning whisper.cpp..."
+    git clone --depth 1 --branch "$RELEASE" https://github.com/ggml-org/whisper.cpp.git "$BUILD_DIR" || {
+      git clone https://github.com/ggml-org/whisper.cpp.git "$BUILD_DIR"
+      cd "$BUILD_DIR"
+      git checkout -f "$RELEASE"
+    }
+  fi
+  
+  local PUSHED_DIR="$(pwd)"
+  cd "$BUILD_DIR"
+  git submodule update --init --recursive --depth 1 || git submodule update --init --recursive
+  
+  local build_subdir="build-$backend"
+  rm -rf "$build_subdir" && mkdir "$build_subdir" && cd "$build_subdir"
+  
+  local cmake_flags="-DWHISPER_BUILD_EXAMPLES=ON -DCMAKE_BUILD_TYPE=Release"
+  if [[ "$backend" == "vulkan" ]]; then
+    cmake_flags="$cmake_flags -DGGML_VULKAN=ON"
+  fi
+  
+  echo "   >>   Running cmake for whisper.cpp $backend backend..."
+  if cmake .. $cmake_flags && cmake --build . --config Release -j"$JOBS"; then
+    mkdir -p "$dest_dir"
+    local main_bin=""
+    local server_bin=""
+    
+    if [[ -f bin/whisper-cli ]]; then
+      main_bin="bin/whisper-cli"
+    elif [[ -f bin/main ]]; then
+      main_bin="bin/main"
+    elif [[ -f whisper-cli ]]; then
+      main_bin="whisper-cli"
+    elif [[ -f main ]]; then
+      main_bin="main"
+    fi
+    
+    if [[ -f bin/whisper-server ]]; then
+      server_bin="bin/whisper-server"
+    elif [[ -f bin/server ]]; then
+      server_bin="bin/server"
+    elif [[ -f whisper-server ]]; then
+      server_bin="whisper-server"
+    elif [[ -f server ]]; then
+      server_bin="server"
+    fi
+    
+    if [[ -n "$main_bin" ]]; then
+      cp "$main_bin" "$dest_dir/whisper-cli"
+      chmod +x "$dest_dir/whisper-cli"
+    else
+      echo "   XX   Build succeeded but whisper-cli (or main) was not found." >&2
+      cd "$PUSHED_DIR"
+      return 1
+    fi
+    
+    if [[ -n "$server_bin" ]]; then
+      cp "$server_bin" "$dest_dir/whisper-server"
+      chmod +x "$dest_dir/whisper-server"
+    fi
+    
+    find . -maxdepth 2 -type f \( -name "*.so" -o -name "*.so.*" \) -exec cp -d {} "$dest_dir/" \; 2>/dev/null || true
+    
+    echo "   OK   whisper.cpp $backend backend compiled and installed successfully from source."
+    cd "$PUSHED_DIR"
+    return 0
+  else
+    echo "   XX   whisper.cpp $backend backend build from source failed." >&2
+    cd "$PUSHED_DIR"
+    return 1
+  fi
+}
+
 if [[ "$PLATFORM" == "Linux" ]]; then
   mkdir -p "$APP_DIR/speech-backend/linux/cpu" "$APP_DIR/speech-backend/linux/vulkan"
   if [[ ! -x "$APP_DIR/speech-backend/linux/cpu/whisper-cli" && -x "$APP_DIR/speech-backend/linux/whisper-cli" ]]; then
@@ -98,7 +184,10 @@ if [[ "$PLATFORM" == "Linux" ]]; then
     chmod +x "$APP_DIR/speech-backend/linux/cpu"/whisper-* "$APP_DIR/speech-backend/linux/cpu"/main "$APP_DIR/speech-backend/linux/cpu"/server 2>/dev/null || true
     echo "   OK   migrated existing whisper.cpp CPU backend to app/speech-backend/linux/cpu."
   fi
-  if [[ "$ARCH" == "aarch64" || "$ARCH" == "arm64" ]]; then
+  if [[ "${UAIS_FORCE_COMPILE:-0}" == "1" ]]; then
+    build_whisper_from_source cpu "$APP_DIR/speech-backend/linux/cpu"
+    build_whisper_from_source vulkan "$APP_DIR/speech-backend/linux/vulkan" || true
+  elif [[ "$ARCH" == "aarch64" || "$ARCH" == "arm64" ]]; then
     download_and_extract "whisper-bin-ubuntu-arm64.tar.gz" "$APP_DIR/speech-backend/linux/cpu"
   else
     download_and_extract "whisper-bin-ubuntu-x64.tar.gz" "$APP_DIR/speech-backend/linux/cpu"

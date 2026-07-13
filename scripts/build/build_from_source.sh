@@ -5,6 +5,7 @@
 #
 
 set -euo pipefail
+export PNPM_CONFIG_NODE_LINKER=hoisted
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(dirname "$(dirname "$SCRIPT_DIR")")"
@@ -45,7 +46,7 @@ if [ "$PLATFORM" = "Darwin" ]; then
     echo ""
     echo "=== Building macOS Metal Backend ==="
     rm -rf build-metal && mkdir build-metal && cd build-metal
-    cmake .. -DSD_METAL=ON -DSD_BUILD_SHARED_LIBS=ON -DCMAKE_BUILD_TYPE=Release
+    cmake .. -DSD_METAL=ON -DSD_BUILD_SHARED_LIBS=ON -DCMAKE_BUILD_TYPE=Release -DSD_SERVER_BUILD_FRONTEND=OFF
     cmake --build . --config Release -j"$JOBS"
 
     echo "Copying macOS Metal backend..."
@@ -69,7 +70,7 @@ fi
 echo ""
 echo "=== Building CPU Backend ==="
 rm -rf build-cpu && mkdir build-cpu && cd build-cpu
-cmake .. -DSD_BUILD_SHARED_LIBS=ON -DCMAKE_BUILD_TYPE=Release
+cmake .. -DSD_BUILD_SHARED_LIBS=ON -DCMAKE_BUILD_TYPE=Release -DSD_SERVER_BUILD_FRONTEND=OFF
 cmake --build . --config Release -j"$JOBS"
 
 echo "Copying CPU binaries..."
@@ -104,7 +105,7 @@ cd "$BUILD_DIR"
 echo ""
 echo "=== Building Vulkan Backend ==="
 if rm -rf build-vulkan && mkdir build-vulkan && cd build-vulkan && \
-   cmake .. -DSD_VULKAN=ON -DSD_BUILD_SHARED_LIBS=ON -DCMAKE_BUILD_TYPE=Release && \
+   cmake .. -DSD_VULKAN=ON -DSD_BUILD_SHARED_LIBS=ON -DCMAKE_BUILD_TYPE=Release -DSD_SERVER_BUILD_FRONTEND=OFF && \
    cmake --build . --config Release -j"$JOBS"; then
 
     echo "Copying Vulkan binaries..."
@@ -139,7 +140,7 @@ cd "$BUILD_DIR"
 echo ""
 echo "=== Building CUDA Backend ==="
 rm -rf build-cuda && mkdir build-cuda && cd build-cuda
-cmake .. -DSD_CUDA=ON -DSD_BUILD_SHARED_LIBS=ON -DCMAKE_BUILD_TYPE=Release -DGGML_CUDA_FORCE_MMQ=ON
+cmake .. -DSD_CUDA=ON -DSD_BUILD_SHARED_LIBS=ON -DCMAKE_BUILD_TYPE=Release -DGGML_CUDA_FORCE_MMQ=ON -DSD_SERVER_BUILD_FRONTEND=OFF
 cmake --build . --config Release -j"$JOBS"
 
 echo "Copying CUDA binaries..."

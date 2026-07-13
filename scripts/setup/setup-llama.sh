@@ -68,14 +68,118 @@ has_linux_gpu_vendor() {
   grep -Ril "$vendor" /sys/bus/pci/devices/*/vendor >/dev/null 2>&1
 }
 
+build_llama_from_source() {
+  local backend="$1" # "cpu", "vulkan", "cuda"
+  local dest_dir="$2"
+  
+  if [[ -x "$dest_dir/llama-server" ]]; then
+    echo "   OK   llama.cpp $backend backend already ready: $dest_dir"
+    return 0
+  fi
+
+  echo "   >>   Building llama.cpp $backend backend from source..."
+  local BUILD_DIR="/tmp/uais-build-llama"
+  local JOBS="$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)"
+  
+  if [[ ! -d "$BUILD_DIR" ]]; then
+    echo "   >>   Cloning llama.cpp..."
+    git clone --depth 1 --branch "$RELEASE" https://github.com/ggml-org/llama.cpp.git "$BUILD_DIR" || {
+      git clone https://github.com/ggml-org/llama.cpp.git "$BUILD_DIR"
+      cd "$BUILD_DIR"
+      git checkout -f "$RELEASE"
+    }
+  fi
+  
+  local PUSHED_DIR="$(pwd)"
+  cd "$BUILD_DIR"
+  git submodule update --init --recursive --depth 1 || git submodule update --init --recursive
+  
+  local build_subdir="build-$backend"
+  rm -rf "$build_subdir" && mkdir "$build_subdir" && cd "$build_subdir"
+  
+  local cmake_flags="-DCMAKE_BUILD_TYPE=Release"
+  if [[ "$backend" == "vulkan" ]]; then
+    cmake_flags="$cmake_flags -DGGML_VULKAN=ON"
+  elif [[ "$backend" == "cuda" ]]; then
+    cmake_flags="$cmake_flags -DGGML_CUDA=ON"
+  fi
+
+  if [[ "$PLATFORM" == "Darwin" ]]; then
+    if [[ "$ARCH" == "x86_64" ]] && ! sysctl -a | grep machdep.cpu.features | grep -q AVX2; then
+      echo "   >>   AVX2 is not supported by CPU, disabling AVX2/FMA for compilation."
+      cmake_flags="$cmake_flags -DGGML_AVX2=OFF -DGGML_FMA=OFF"
+    fi
+  elif [[ "$PLATFORM" == "Linux" ]]; then
+    if [[ "$ARCH" == "x86_64" || "$ARCH" == "amd64" ]] && ! grep -q avx2 /proc/cpuinfo; then
+      echo "   >>   AVX2 is not supported by CPU, disabling AVX2/FMA for compilation."
+      cmake_flags="$cmake_flags -DGGML_AVX2=OFF -DGGML_FMA=OFF"
+    fi
+  fi
+  
+  echo "   >>   Running cmake for llama.cpp $backend backend..."
+  if cmake .. $cmake_flags && cmake --build . --config Release -j"$JOBS"; then
+    mkdir -p "$dest_dir"
+    local server_bin=""
+    local cli_bin=""
+    if [[ -f bin/llama-server ]]; then
+      server_bin="bin/llama-server"
+    elif [[ -f llama-server ]]; then
+      server_bin="llama-server"
+    fi
+    
+    if [[ -f bin/llama-cli ]]; then
+      cli_bin="bin/llama-cli"
+    elif [[ -f llama-cli ]]; then
+      cli_bin="llama-cli"
+    fi
+    
+    if [[ -n "$server_bin" ]]; then
+      cp "$server_bin" "$dest_dir/llama-server"
+      chmod +x "$dest_dir/llama-server"
+    else
+      echo "   XX   Build succeeded but llama-server was not found." >&2
+      cd "$PUSHED_DIR"
+      return 1
+    fi
+    
+    if [[ -n "$cli_bin" ]]; then
+      cp "$cli_bin" "$dest_dir/llama-cli"
+      chmod +x "$dest_dir/llama-cli"
+    fi
+    
+    find bin . -maxdepth 2 -type f -name "llama-*" -not -name "*.*" -exec cp {} "$dest_dir/" \; 2>/dev/null || true
+    find . -maxdepth 2 \( -type f -o -type l \) \( -name "*.so" -o -name "*.so.*" \) -exec cp -L {} "$dest_dir/" \; 2>/dev/null || true
+    
+    echo "   OK   llama.cpp $backend backend compiled and installed successfully from source."
+    cd "$PUSHED_DIR"
+    return 0
+  else
+    echo "   XX   llama.cpp $backend backend build from source failed." >&2
+    cd "$PUSHED_DIR"
+    return 1
+  fi
+}
+
 if [[ "$PLATFORM" == "Darwin" ]]; then
   if [[ "$ARCH" == "arm64" ]]; then
     download_and_extract "llama-$RELEASE-bin-macos-arm64.tar.gz" "$APP_DIR/llm-backend/mac/arm64"
   else
     download_and_extract "llama-$RELEASE-bin-macos-x64.tar.gz" "$APP_DIR/llm-backend/mac/x64"
+    if ! "$APP_DIR/llm-backend/mac/x64/llama-server" --help >/dev/null 2>&1; then
+      echo "   >>   Precompiled llama-server failed to execute (likely due to missing CPU features like AVX2)."
+      echo "   >>   Removing incompatible precompiled binary and compiling from source..."
+      rm -rf "$APP_DIR/llm-backend/mac/x64"
+      build_llama_from_source cpu "$APP_DIR/llm-backend/mac/x64"
+    fi
   fi
 elif [[ "$PLATFORM" == "Linux" ]]; then
-  if [[ "$ARCH" == "aarch64" || "$ARCH" == "arm64" ]]; then
+  if [[ "${UAIS_FORCE_COMPILE:-0}" == "1" ]]; then
+    if has_command nvidia-smi || has_linux_gpu_vendor "0x10de"; then
+      build_llama_from_source cuda "$APP_DIR/llm-backend/linux/cuda" || true
+    fi
+    build_llama_from_source vulkan "$APP_DIR/llm-backend/linux/vulkan" || true
+    build_llama_from_source cpu "$APP_DIR/llm-backend/linux/cpu"
+  elif [[ "$ARCH" == "aarch64" || "$ARCH" == "arm64" ]]; then
     download_and_extract "llama-$RELEASE-bin-ubuntu-vulkan-arm64.tar.gz" "$APP_DIR/llm-backend/linux/vulkan"
     download_and_extract "llama-$RELEASE-bin-ubuntu-arm64.tar.gz" "$APP_DIR/llm-backend/linux/cpu"
   else

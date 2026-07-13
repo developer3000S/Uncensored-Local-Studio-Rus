@@ -2620,6 +2620,8 @@ function transcribeWavBuffer(buffer, options = {}) {
     }
 
     const startedAt = Date.now();
+    const backendDir = path.dirname(backend.cli);
+    fixMissingSharedLibraries(backendDir);
     console.log("  [speech] Starting:", backend.cli, args.join(" "));
     const proc = spawn(backend.cli, args, {
       stdio: "pipe",
@@ -4170,6 +4172,38 @@ async function startLlm(settings = {}) {
   throw new Error(`Text model failed on all available llama.cpp backends. Last failure: ${last?.error || "unknown error"}`);
 }
 
+function fixMissingSharedLibraries(backendDir) {
+  if (osPlatform !== "linux") return;
+  try {
+    if (!fs.existsSync(backendDir)) return;
+    const files = fs.readdirSync(backendDir);
+    for (const file of files) {
+      const match = file.match(/^(lib.+?\.so)\.(\d+)(?:\..+)?$/);
+      if (match) {
+        const baseNameWithSo = match[1];
+        const majorVer = match[2];
+        const linkNameMajor = baseNameWithSo + "." + majorVer;
+        const linkNameBase = baseNameWithSo;
+
+        const srcPath = path.join(backendDir, file);
+        const destMajorPath = path.join(backendDir, linkNameMajor);
+        const destBasePath = path.join(backendDir, linkNameBase);
+
+        if (!fs.existsSync(destMajorPath)) {
+          console.log(`  [backend-fix] Creating copy of library: ${linkNameMajor} -> ${file}`);
+          fs.copyFileSync(srcPath, destMajorPath);
+        }
+        if (!fs.existsSync(destBasePath)) {
+          console.log(`  [backend-fix] Creating copy of library: ${linkNameBase} -> ${file}`);
+          fs.copyFileSync(srcPath, destBasePath);
+        }
+      }
+    }
+  } catch (err) {
+    console.error("  [backend-fix] Error ensuring shared library files:", err);
+  }
+}
+
 async function startLlmWithBackend(settings = {}, backend) {
   const filename = path.basename(String(settings.model || ""));
   const modelPath = path.join(LLM_MODELS, filename);
@@ -4347,6 +4381,7 @@ async function startLlmWithBackend(settings = {}, backend) {
     : (isMultimodal ? "Matching mmproj projector not found" : "Model is text-only");
   const spawnEnv = { ...process.env };
   const backendDir = path.dirname(backend.path);
+  fixMissingSharedLibraries(backendDir);
   
   // Platform library paths
   if (osPlatform === "linux") {
@@ -4565,6 +4600,9 @@ async function startBackend(settings = {}) {
       extraLibs.push(path.dirname(BACKEND_PATHS.linuxCuda));
     }
     if (extraLibs.length > 0) {
+      for (const libDir of extraLibs) {
+        fixMissingSharedLibraries(libDir);
+      }
       const existing = spawnEnv.LD_LIBRARY_PATH || "";
       spawnEnv.LD_LIBRARY_PATH = extraLibs.join(":") + (existing ? ":" + existing : "");
     }
