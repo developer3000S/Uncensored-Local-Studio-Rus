@@ -6158,8 +6158,14 @@ async function executeAgentTask(job) {
 
   let chatHistory = [];
   try {
-    const rawHistory = dbQuery("SELECT role, content FROM agent_chats WHERE agent_id = ? ORDER BY created_at DESC LIMIT 20;", [agent.id]);
-    chatHistory = rawHistory.reverse();
+    const rawHistory = dbQuery("SELECT role, content FROM agent_chats WHERE agent_id = ? ORDER BY created_at DESC LIMIT 10;", [agent.id]);
+    chatHistory = rawHistory.reverse().map(msg => {
+      if (msg.role === "assistant" && typeof msg.content === "string") {
+        const cleaned = msg.content.replace(/<think>[\s\S]*?<\/think>\n?/gi, "").trim();
+        return { role: msg.role, content: cleaned };
+      }
+      return { role: msg.role, content: msg.content };
+    });
   } catch (err) {
     console.error("  [agent-chat] Failed to fetch chat history:", err);
   }
@@ -7904,8 +7910,15 @@ async function getLlmfitRecommendations(useCase = "chat", limit = 10) {
       // Fetch history
       let chatHistory = [];
       try {
-        const rawHistory = dbQuery("SELECT role, content FROM agent_chats WHERE agent_id = ? ORDER BY created_at DESC LIMIT 20;", [id]);
-        chatHistory = rawHistory.reverse();
+        const rawHistory = dbQuery("SELECT role, content FROM agent_chats WHERE agent_id = ? ORDER BY created_at DESC LIMIT 10;", [id]);
+        chatHistory = rawHistory.reverse().map(msg => {
+          if (msg.role === "assistant" && typeof msg.content === "string") {
+            // Strip raw thinking block from history to save context space and prevent model confusion/OOM
+            const cleaned = msg.content.replace(/<think>[\s\S]*?<\/think>\n?/gi, "").trim();
+            return { role: msg.role, content: cleaned };
+          }
+          return { role: msg.role, content: msg.content };
+        });
       } catch (err) {
         console.error("  [agent-chat] Failed to fetch chat history:", err);
       }
@@ -7922,9 +7935,17 @@ async function getLlmfitRecommendations(useCase = "chat", limit = 10) {
       const requestData = JSON.stringify({
         model: llmSettings.model || "local-model",
         messages: webAugmentation.messages,
-        temperature: 0.7,
+        temperature: Number.isFinite(Number(body.temperature)) ? Number(body.temperature) : 0.7,
+        max_tokens: Math.max(1, Math.min(4096, Number(body.max_tokens) || Number(body.maxTokens) || 1024)),
         stream: true,
-        enableThinking: body.enableThinking === true
+        top_p: Number.isFinite(Number(body.top_p)) ? Number(body.top_p) : 0.95,
+        top_k: Number.isFinite(Number(body.top_k)) ? Number(body.top_k) : 40,
+        min_p: Number.isFinite(Number(body.min_p)) ? Number(body.min_p) : 0.05,
+        repeat_penalty: Number.isFinite(Number(body.repeat_penalty)) ? Number(body.repeat_penalty) : 1.1,
+        frequency_penalty: Number.isFinite(Number(body.frequency_penalty)) ? Number(body.frequency_penalty) : 0.0,
+        presence_penalty: Number.isFinite(Number(body.presence_penalty)) ? Number(body.presence_penalty) : 0.0,
+        seed: Number.isInteger(Number(body.seed)) ? Number(body.seed) : undefined,
+        stop: Array.isArray(body.stop) ? body.stop : (body.stop ? [body.stop] : undefined),
       });
 
       // Write user message to DB immediately
@@ -8025,12 +8046,13 @@ async function getLlmfitRecommendations(useCase = "chat", limit = 10) {
         });
 
         activeClientReq.on("error", (err) => {
-          console.error("  [agent-chat] clientReq error:", err);
-          if (retriesLeft > 0 && (err.code === "ECONNRESET" || err.code === "EPIPE" || err.code === "ETIMEDOUT")) {
-            console.warn(`  [agent-chat] Connection issue (${err.code}). Retrying request...`);
+          const isRetryable = retriesLeft > 0 && (err.code === "ECONNRESET" || err.code === "EPIPE" || err.code === "ETIMEDOUT");
+          if (isRetryable) {
+            console.warn(`  [agent-chat] Connection issue (${err.code || err.message}). Retrying request...`);
             makeRequest(retriesLeft - 1);
             return;
           }
+          console.error("  [agent-chat] clientReq error:", err);
           if (!res.headersSent) {
             res.writeHead(500, { "Content-Type": "application/json" });
             res.end(JSON.stringify({ ok: false, error: err.message }));

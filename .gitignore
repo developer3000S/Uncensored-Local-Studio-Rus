@@ -21,6 +21,7 @@ app/chat-history/
 app/transcriptions/
 app/tts-outputs/
 app/tts-cache/
+app/rag/
 
 # Dependencies and platform-specific copies
 **/node_modules/
