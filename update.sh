@@ -33,7 +33,15 @@ git push origin main --no-thin
 
 # 4. Rebuild frontend
 echo "[4/4] Rebuild frontend ..."
-cd app/frontend && npm install && npm run build && cd ../..
+cd app/frontend
+npm install --no-bin-links
+mkdir -p node_modules/.bin
+cp node_modules/vite/bin/vite.js node_modules/.bin/vite
+chmod +x node_modules/.bin/vite
+cp node_modules/@tauri-apps/cli/tauri.js node_modules/.bin/tauri
+chmod +x node_modules/.bin/tauri
+npm run build
+cd ../..
 
 if [ $? -eq 0 ]; then
     echo "--- Success: Repository updated! ---"
