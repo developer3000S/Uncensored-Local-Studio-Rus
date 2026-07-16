@@ -37,7 +37,7 @@ try {
 // HTTP keep-alive agent for llama-server (eliminates TCP handshake per request)
 const llmHttpAgent = new http.Agent({
   keepAlive: true,
-  maxSockets: 1,
+  maxSockets: 10,
   keepAliveMsecs: 30000,
 });
 
