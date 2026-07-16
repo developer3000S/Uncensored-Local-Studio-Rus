@@ -74,7 +74,14 @@ function Sidebar({
           <div className="nav-item-wrapper" style={{ display: "flex", flexDirection: "column" }}>
             <div
               className={`nav-item ${activeTab === "chat" ? "active" : ""}`}
-              onClick={() => setActiveTab("chat")}
+              onClick={() => {
+                if (activeTab === "chat") {
+                  setShowHistory(!showHistory);
+                } else {
+                  setActiveTab("chat");
+                  setShowHistory(true);
+                }
+              }}
               style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", boxSizing: "border-box" }}
             >
               <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
@@ -191,7 +198,14 @@ function Sidebar({
           <div className="nav-item-wrapper" style={{ display: "flex", flexDirection: "column" }}>
             <div
               className={`nav-item ${activeTab === "agents" ? "active" : ""}`}
-              onClick={() => setActiveTab("agents")}
+              onClick={() => {
+                if (activeTab === "agents") {
+                  setShowAgents(!showAgents);
+                } else {
+                  setActiveTab("agents");
+                  setShowAgents(true);
+                }
+              }}
               style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", boxSizing: "border-box" }}
             >
               <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
