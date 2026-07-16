@@ -5888,7 +5888,10 @@ function dbQuery(sql, params = []) {
   const tmpSqlFile = path.join(os.tmpdir(), `query_${Date.now()}_${Math.random().toString(36).slice(2)}.sql`);
   fs.writeFileSync(tmpSqlFile, formattedSql, "utf8");
   try {
-    const output = execSync(`sqlite3 -json "${sqliteDbPath}" < "${tmpSqlFile}"`, { encoding: "utf8" });
+    const output = execSync(`sqlite3 -json "${sqliteDbPath}" < "${tmpSqlFile}"`, {
+      encoding: "utf8",
+      maxBuffer: 1024 * 1024 * 256 // 256MB
+    });
     return JSON.parse(output.trim() || "[]");
   } catch (err) {
     if (err.message.includes("Unexpected end of JSON input")) {
@@ -7931,109 +7934,119 @@ async function getLlmfitRecommendations(useCase = "chat", limit = 10) {
       );
 
       // Start SSE Streaming Request
-      const clientReq = http.request({
-        hostname: "127.0.0.1",
-        port: PORT_LLM,
-        path: "/v1/chat/completions",
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Content-Length": Buffer.byteLength(requestData),
-        },
-        agent: llmHttpAgent,
-      }, (clientRes) => {
-        if (clientRes.statusCode < 200 || clientRes.statusCode >= 300) {
-          let errorBody = "";
-          clientRes.setEncoding("utf8");
-          clientRes.on("data", (chunk) => { errorBody += chunk; });
-          clientRes.on("end", () => {
-            let errMsg = `Text backend returned HTTP ${clientRes.statusCode}`;
-            try {
-              errMsg = JSON.parse(errorBody || "{}").error?.message || errMsg;
-            } catch (_) {}
-            if (!res.headersSent) {
-              json(res, clientRes.statusCode || 500, { ok: false, error: errMsg });
+      let activeClientReq = null;
+      function makeRequest(retriesLeft) {
+        activeClientReq = http.request({
+          hostname: "127.0.0.1",
+          port: PORT_LLM,
+          path: "/v1/chat/completions",
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Content-Length": Buffer.byteLength(requestData),
+          },
+          agent: llmHttpAgent,
+        }, (clientRes) => {
+          if (clientRes.statusCode < 200 || clientRes.statusCode >= 300) {
+            let errorBody = "";
+            clientRes.setEncoding("utf8");
+            clientRes.on("data", (chunk) => { errorBody += chunk; });
+            clientRes.on("end", () => {
+              let errMsg = `Text backend returned HTTP ${clientRes.statusCode}`;
+              try {
+                errMsg = JSON.parse(errorBody || "{}").error?.message || errMsg;
+              } catch (_) {}
+              if (!res.headersSent) {
+                json(res, clientRes.statusCode || 500, { ok: false, error: errMsg });
+              }
+            });
+            return;
+          }
+
+          if (res.headersSent) return;
+          res.writeHead(200, {
+            "Content-Type": "text/event-stream; charset=utf-8",
+            "Cache-Control": "no-cache, no-transform",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+            "X-Content-Type-Options": "nosniff",
+          });
+          const socket = res.socket || res.connection;
+          socket?.setNoDelay?.(true);
+          res.flushHeaders?.();
+
+          if (webAugmentation.webSources.length) {
+            res.write(`event: web_sources\ndata: ${JSON.stringify({ sources: webAugmentation.webSources })}\n\n`);
+          }
+
+          let fullReply = "";
+          let fullReasoning = "";
+          let chunkBuffer = "";
+
+          clientRes.on("data", (chunk) => {
+            res.write(chunk);
+            
+            chunkBuffer += chunk.toString("utf8");
+            let lines = chunkBuffer.split("\n");
+            chunkBuffer = lines.pop() || "";
+            
+            for (let line of lines) {
+              line = line.trim();
+              if (!line.startsWith("data:")) continue;
+              const dataStr = line.slice(5).trim();
+              if (dataStr === "[DONE]") continue;
+              try {
+                const parsed = JSON.parse(dataStr);
+                const choice = parsed.choices?.[0];
+                const token = choice?.delta?.content ?? choice?.message?.content ?? choice?.text ?? parsed.content ?? parsed.response;
+                if (token) fullReply += token;
+                const reasoning = choice?.delta?.reasoning_content ?? choice?.delta?.reasoning ?? choice?.delta?.thinking ?? choice?.message?.reasoning_content ?? parsed.reasoning_content;
+                if (reasoning) fullReasoning += reasoning;
+              } catch (_) {}
             }
           });
-          return;
-        }
 
-        if (res.headersSent) return;
-        res.writeHead(200, {
-          "Content-Type": "text/event-stream; charset=utf-8",
-          "Cache-Control": "no-cache, no-transform",
-          "Connection": "keep-alive",
-          "X-Accel-Buffering": "no",
-          "X-Content-Type-Options": "nosniff",
+          clientRes.on("end", () => {
+            let savedContent = fullReply;
+            if (fullReasoning) {
+              savedContent = `<think>\n${fullReasoning}\n</think>\n${fullReply}`;
+            }
+            dbRun(
+              "INSERT INTO agent_chats (id, agent_id, role, content, created_at) VALUES (?, ?, ?, ?, ?);",
+              [crypto.randomUUID(), id, "assistant", savedContent, new Date().toISOString()]
+            );
+            res.end();
+          });
+
+          clientRes.on("error", (err) => {
+            console.error("  [agent-chat] clientRes stream error:", err);
+            if (!res.writableEnded) res.destroy(err);
+          });
         });
-        const socket = res.socket || res.connection;
-        socket?.setNoDelay?.(true);
-        res.flushHeaders?.();
 
-        if (webAugmentation.webSources.length) {
-          res.write(`event: web_sources\ndata: ${JSON.stringify({ sources: webAugmentation.webSources })}\n\n`);
-        }
-
-        let fullReply = "";
-        let fullReasoning = "";
-        let chunkBuffer = "";
-
-        clientRes.on("data", (chunk) => {
-          res.write(chunk);
-          
-          chunkBuffer += chunk.toString("utf8");
-          let lines = chunkBuffer.split("\n");
-          chunkBuffer = lines.pop() || "";
-          
-          for (let line of lines) {
-            line = line.trim();
-            if (!line.startsWith("data:")) continue;
-            const dataStr = line.slice(5).trim();
-            if (dataStr === "[DONE]") continue;
-            try {
-              const parsed = JSON.parse(dataStr);
-              const choice = parsed.choices?.[0];
-              const token = choice?.delta?.content ?? choice?.message?.content ?? choice?.text ?? parsed.content ?? parsed.response;
-              if (token) fullReply += token;
-              const reasoning = choice?.delta?.reasoning_content ?? choice?.delta?.reasoning ?? choice?.delta?.thinking ?? choice?.message?.reasoning_content ?? parsed.reasoning_content;
-              if (reasoning) fullReasoning += reasoning;
-            } catch (_) {}
+        activeClientReq.on("error", (err) => {
+          console.error("  [agent-chat] clientReq error:", err);
+          if (retriesLeft > 0 && (err.code === "ECONNRESET" || err.code === "EPIPE" || err.code === "ETIMEDOUT")) {
+            console.warn(`  [agent-chat] Connection issue (${err.code}). Retrying request...`);
+            makeRequest(retriesLeft - 1);
+            return;
+          }
+          if (!res.headersSent) {
+            res.writeHead(500, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ ok: false, error: err.message }));
+          } else {
+            res.end();
           }
         });
 
-        clientRes.on("end", () => {
-          let savedContent = fullReply;
-          if (fullReasoning) {
-            savedContent = `<think>\n${fullReasoning}\n</think>\n${fullReply}`;
-          }
-          dbRun(
-            "INSERT INTO agent_chats (id, agent_id, role, content, created_at) VALUES (?, ?, ?, ?, ?);",
-            [crypto.randomUUID(), id, "assistant", savedContent, new Date().toISOString()]
-          );
-          res.end();
-        });
+        activeClientReq.write(requestData);
+        activeClientReq.end();
+      }
 
-        clientRes.on("error", (err) => {
-          console.error("  [agent-chat] clientRes stream error:", err);
-          if (!res.writableEnded) res.destroy(err);
-        });
-      });
-
-      clientReq.on("error", (err) => {
-        console.error("  [agent-chat] clientReq error:", err);
-        if (!res.headersSent) {
-          res.writeHead(500, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ ok: false, error: err.message }));
-        } else {
-          res.end();
-        }
-      });
-
-      clientReq.write(requestData);
-      clientReq.end();
+      makeRequest(1);
 
       res.on("close", () => {
-        if (!res.writableEnded && !clientReq.destroyed) clientReq.destroy();
+        if (!res.writableEnded && activeClientReq && !activeClientReq.destroyed) activeClientReq.destroy();
       });
 
     } catch (err) {
