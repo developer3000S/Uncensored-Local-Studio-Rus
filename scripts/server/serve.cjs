@@ -6020,8 +6020,20 @@ function getEmbedding(text) {
         }
         try {
           const parsed = JSON.parse(body);
-          if (parsed.embedding) {
-            resolve(parsed.embedding);
+          // llama.cpp /embedding returns one of:
+          //   [{embedding: [...]}]          — array of objects (newer builds)
+          //   {embedding: [...]}            — bare object (older builds)
+          //   {data: [{embedding: [...]}]}  — OpenAI-compat shape
+          let vec = null;
+          if (Array.isArray(parsed) && parsed[0]?.embedding) {
+            vec = parsed[0].embedding;
+          } else if (parsed.embedding) {
+            vec = parsed.embedding;
+          } else if (parsed.data?.[0]?.embedding) {
+            vec = parsed.data[0].embedding;
+          }
+          if (vec && Array.isArray(vec)) {
+            resolve(vec);
           } else {
             reject(new Error("No embedding field in response: " + body));
           }

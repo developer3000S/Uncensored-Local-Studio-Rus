@@ -237,8 +237,13 @@ All agent configurations, persistent chat history, uploaded files, vector embedd
 ## <a id="troubleshooting-faq"></a>🛠️ Troubleshooting & FAQ
 
 <details>
-  <summary><strong>RAG embedding error: "input is too large to process" (500)</strong></summary>
-  <p>This error occurs when the text sent to the llama.cpp embedding endpoint exceeds the server's physical batch size (default 512 tokens). As of this version, query text is automatically truncated to ~1 500 characters (~400 tokens) before embedding, and RAG chunks are capped at ~400 characters — both safely within the 512-token limit. If the error still appears, make sure you are running the latest <code>scripts/server/serve.cjs</code>.</p>
+  <summary><strong>RAG embedding errors</strong></summary>
+  <p>Two scenarios can occur:</p>
+  <ul>
+    <li><strong>"input is too large to process" (HTTP 500)</strong> — the text exceeds the llama.cpp server's physical batch size (default 512 tokens). Query text is now automatically truncated to ~1 500 characters before embedding, and RAG chunks are capped at ~400 characters — both safely within the limit.</li>
+    <li><strong>"No embedding field in response"</strong> — newer llama.cpp builds changed the <code>/embedding</code> response format from a bare object <code>{"embedding":[...]}</code> to an array of objects <code>[{"embedding":[...]}]</code>. The parser now handles all three known shapes: array-of-objects, bare object, and OpenAI-compat <code>{"data":[{"embedding":[...]}]}</code>.</li>
+  </ul>
+  <p>If the error persists, make sure you are running the latest <code>scripts/server/serve.cjs</code>.</p>
 </details>
 
 <details>
