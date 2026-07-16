@@ -18,8 +18,46 @@ set LLM_CPU_BACKEND=%APP%\llm-backend\win\cpu\llama-server.exe
 set SPEECH_BACKEND=%APP%\speech-backend\win\cpu\whisper-cli.exe
 set TTS_RUNTIME=%APP%\tts-runtime\node_modules\kokoro-js
 set SERVE=%~dp0scripts\server\serve.cjs
+:: Load .env if it exists
+if exist "%~dp0.env" (
+    for /f "usebackq delims=" %%x in ("%~dp0.env") do (
+        set "line=%%x"
+        if not "!line:~0,1!"=="#" (
+            for /f "tokens=1* delims==" %%a in ("!line!") do (
+                set "key=%%a"
+                set "val=%%b"
+                if defined val (
+                    set "val=!val:"=!"
+                    set "val=!val:'=!"
+                )
+                set "!key!=!val!"
+            )
+        )
+    )
+)
+
+if not "!FRONTED_PORT!"=="" set "FRONTEND_PORT=!FRONTED_PORT!"
+if not "!API_GPU!"=="" set "BACKEND_PORT=!API_GPU!"
+if not "!TEXT_API!"=="" set "LLM_PORT=!TEXT_API!"
+
 if "%FRONTEND_PORT%"=="" set FRONTEND_PORT=1420
 if "%LLM_PORT%"=="" set LLM_PORT=10086
+if "%BACKEND_PORT%"=="" set BACKEND_PORT=8080
+
+:: Освобождаем порты, если они заняты
+for /f "tokens=5" %%a in ('netstat -aon 2^>nul ^| findstr ":%FRONTEND_PORT% " ^| findstr /I "LISTENING"') do (
+    echo  [ИНФО] Порт %FRONTEND_PORT% занят. Освобождаю его...
+    taskkill /f /pid %%a >nul 2>nul
+)
+for /f "tokens=5" %%a in ('netstat -aon 2^>nul ^| findstr ":%BACKEND_PORT% " ^| findstr /I "LISTENING"') do (
+    echo  [ИНФО] Порт %BACKEND_PORT% занят. Освобождаю его...
+    taskkill /f /pid %%a >nul 2>nul
+)
+for /f "tokens=5" %%a in ('netstat -aon 2^>nul ^| findstr ":%LLM_PORT% " ^| findstr /I "LISTENING"') do (
+    echo  [ИНФО] Порт %LLM_PORT% занят. Освобождаю его...
+    taskkill /f /pid %%a >nul 2>nul
+)
+
 set SETUP_REASON=
 set SETUP_MODE=Repair
 
@@ -74,7 +112,7 @@ pause >nul
 :: Очистка старых управляемых процессов бэкенда перед настройкой,
 :: чтобы можно было заменить app\tools\node-win.
 :: Не убиваем порт фронтенда; при запуске будет выбран свободный порт.
-for /f "tokens=5" %%a in ('netstat -aon 2^>nul ^| findstr ":8080 "') do taskkill /f /pid %%a >nul 2>nul
+for /f "tokens=5" %%a in ('netstat -aon 2^>nul ^| findstr ":%BACKEND_PORT% "') do taskkill /f /pid %%a >nul 2>nul
 for /f "tokens=5" %%a in ('netstat -aon 2^>nul ^| findstr ":%LLM_PORT% "') do taskkill /f /pid %%a >nul 2>nul
 
 powershell -ExecutionPolicy Bypass -File "%SETUP%"
@@ -102,8 +140,8 @@ if errorlevel 1 exit /b 1
 if not "%FRONTEND_PORT%"=="%REQUESTED_FRONTEND_PORT%" echo  Порт фронтенда %REQUESTED_FRONTEND_PORT% занят; используется %FRONTEND_PORT% вместо.
 
 :: Очищаем управляемые порты бэкенда, чтобы избежать конфликтов API.
-echo  Очистка порта бэкенда 8080 и текстового порта %LLM_PORT%...
-for /f "tokens=5" %%a in ('netstat -aon 2^>nul ^| findstr ":8080 "') do taskkill /f /pid %%a >nul 2>nul
+echo  Очистка порта бэкенда %BACKEND_PORT% и текстового порта %LLM_PORT%...
+for /f "tokens=5" %%a in ('netstat -aon 2^>nul ^| findstr ":%BACKEND_PORT% "') do taskkill /f /pid %%a >nul 2>nul
 for /f "tokens=5" %%a in ('netstat -aon 2^>nul ^| findstr ":%LLM_PORT% "') do taskkill /f /pid %%a >nul 2>nul
 
 :: Запуск сервера фронтенда + менеджера бэкенда (serve.cjs управляет sd-vulkan.exe)
@@ -115,7 +153,7 @@ echo.
 echo  ============================================================
 echo   Работает!
 echo   Web UI:     http://localhost:%FRONTEND_PORT%
-echo   GPU API:    Выбран приложением автоматически (стартует с 8080)
+echo   GPU API:    Выбран приложением автоматически (стартует с %BACKEND_PORT%)
 echo   Text API:   Запускается, когда загружена GGUF модель (порт %LLM_PORT%)
 echo   Speech:     Управляется приложением локально
 echo   TTS:        Управляется приложением локально

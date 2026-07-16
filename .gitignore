@@ -51,3 +51,4 @@ Thumbs.db
 .Spotlight-V100
 graphify-out/
 graphify-out
+.env

@@ -33,8 +33,37 @@ DIST_INDEX="$APP_DIR/dist/index.html"
 SETUP_SCRIPT="$SCRIPT_DIR/scripts/setup/setup.sh"
 SERVE_SCRIPT="$SCRIPT_DIR/scripts/server/serve.cjs"
 
+# Load .env if it exists
+if [[ -f "$SCRIPT_DIR/.env" ]]; then
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    if [[ "$line" =~ ^[[:space:]]*# ]] || [[ -z "$line" ]]; then
+      continue
+    fi
+    if [[ "$line" == *"="* ]]; then
+      key="${line%%=*}"
+      value="${line#*=}"
+      value="${value#\"}"
+      value="${value%\"}"
+      value="${value#\'}"
+      value="${value%\'}"
+      export "$key=$value"
+    fi
+  done < "$SCRIPT_DIR/.env"
+fi
+
+if [[ -n "${FRONTED_PORT:-}" ]]; then
+  FRONTEND_PORT="$FRONTED_PORT"
+fi
+if [[ -n "${API_GPU:-}" ]]; then
+  BACKEND_PORT="$API_GPU"
+fi
+if [[ -n "${TEXT_API:-}" ]]; then
+  LLM_PORT="$TEXT_API"
+fi
+
 FRONTEND_PORT="${FRONTEND_PORT:-1420}"
 LLM_PORT="${LLM_PORT:-10086}"
+BACKEND_PORT="${BACKEND_PORT:-8080}"
 SETUP_REASON=""
 SETUP_MODE="Repair"
 
@@ -50,6 +79,23 @@ is_port_in_use() {
   fi
   (echo >"/dev/tcp/127.0.0.1/$port") >/dev/null 2>&1
 }
+
+kill_port_if_in_use() {
+  local port="$1"
+  if is_port_in_use "$port"; then
+    echo "  [ИНФО] Порт $port занят. Освобождаю его..."
+    if command -v lsof >/dev/null 2>&1; then
+      lsof -t -i:"$port" | xargs kill -9 >/dev/null 2>&1 || true
+    elif command -v fuser >/dev/null 2>&1; then
+      fuser -k "$port/tcp" >/dev/null 2>&1 || true
+    fi
+    sleep 1
+  fi
+}
+
+kill_port_if_in_use "$FRONTEND_PORT"
+kill_port_if_in_use "$BACKEND_PORT"
+kill_port_if_in_use "$LLM_PORT"
 
 resolve_frontend_port() {
   local preferred="$1"
@@ -184,9 +230,9 @@ if [[ -n "$SETUP_REASON" ]]; then
   # Порт фронтенда трогать не нужно — лаунчер сам выберет свободный порт.
   if command -v lsof >/dev/null 2>&1; then
 
-    lsof -t -i:8080 -i:"${LLM_PORT}" | xargs kill -9 >/dev/null 2>&1 || true
+    lsof -t -i:"${BACKEND_PORT}" -i:"${LLM_PORT}" | xargs kill -9 >/dev/null 2>&1 || true
   elif command -v fuser >/dev/null 2>&1; then
-    fuser -k "8080/tcp" >/dev/null 2>&1 || true
+    fuser -k "${BACKEND_PORT}/tcp" >/dev/null 2>&1 || true
     fuser -k "${LLM_PORT}/tcp" >/dev/null 2>&1 || true
   fi
 
@@ -216,10 +262,10 @@ fi
 
   # Очищаю порты управляемого бэкенда
   if command -v lsof >/dev/null 2>&1; then
-    lsof -t -i:8080 -i:"${LLM_PORT}" | xargs kill -9 >/dev/null 2>&1 || true
+    lsof -t -i:"${BACKEND_PORT}" -i:"${LLM_PORT}" | xargs kill -9 >/dev/null 2>&1 || true
 
 elif command -v fuser >/dev/null 2>&1; then
-  fuser -k "8080/tcp" >/dev/null 2>&1 || true
+  fuser -k "${BACKEND_PORT}/tcp" >/dev/null 2>&1 || true
   fuser -k "${LLM_PORT}/tcp" >/dev/null 2>&1 || true
 fi
 
@@ -247,7 +293,7 @@ echo ""
 echo "  ============================================================"
 echo "   Запущено!"
 echo "   Web UI:     http://localhost:${FRONTEND_PORT}"
-echo "   API GPU:    Автовыбор приложением (стартует с 8080)"
+echo "   API GPU:    Автовыбор приложением (стартует с ${BACKEND_PORT})"
 echo "   Text API:   Запускается при загрузке модели GGUF (порт ${LLM_PORT})"
 echo "   Speech:     Управляется локально приложением"
 echo "   TTS:        Управляется локально приложением"

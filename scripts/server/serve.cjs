@@ -12,6 +12,28 @@ const path     = require("path");
 const { spawn, spawnSync, execSync, exec, execFile } = require("child_process");
 const { comprehensiveWebSearch } = require("../search/core");
 
+// Load .env if it exists
+try {
+  const envPath = path.join(__dirname, "..", "..", ".env");
+  if (fs.existsSync(envPath)) {
+    const envContent = fs.readFileSync(envPath, "utf8");
+    for (const line of envContent.split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) continue;
+      const index = trimmed.indexOf("=");
+      if (index === -1) continue;
+      const key = trimmed.substring(0, index).trim();
+      const val = trimmed.substring(index + 1).trim();
+      if (key) {
+        const unquoted = val.replace(/^["']|["']$/g, "");
+        process.env[key] = unquoted;
+      }
+    }
+  }
+} catch (e) {
+  console.warn("Warning: failed to load .env file:", e);
+}
+
 // HTTP keep-alive agent for llama-server (eliminates TCP handshake per request)
 const llmHttpAgent = new http.Agent({
   keepAlive: true,
@@ -28,9 +50,9 @@ function readPort(value, fallback) {
   return Number.isInteger(port) && port > 0 && port < 65536 ? port : fallback;
 }
 
-const PORT_FRONTEND = readPort(process.env.PORT || process.env.FRONTEND_PORT, 1420);
-const PREFERRED_BACKEND_PORT = readPort(process.env.BACKEND_PORT || process.env.SD_BACKEND_PORT, 8080);
-const PREFERRED_LLM_PORT = readPort(process.env.LLM_PORT, 10086);
+const PORT_FRONTEND = readPort(process.env.PORT || process.env.FRONTEND_PORT || process.env.FRONTED_PORT, 1420);
+const PREFERRED_BACKEND_PORT = readPort(process.env.BACKEND_PORT || process.env.SD_BACKEND_PORT || process.env.API_GPU, 8080);
+const PREFERRED_LLM_PORT = readPort(process.env.LLM_PORT || process.env.TEXT_API, 10086);
 const PREFERRED_SPEECH_PORT = readPort(process.env.SPEECH_PORT, 10088);
 const PREFERRED_TTS_PORT = readPort(process.env.TTS_PORT, 10089);
 let PORT_BACKEND = PREFERRED_BACKEND_PORT;
@@ -5964,13 +5986,30 @@ async function extractText(filePath, filename) {
   const ext = path.extname(filename).toLowerCase();
   if (ext === ".txt" || ext === ".md") {
     return fs.readFileSync(filePath, "utf8");
-  } else if (ext === ".pdf") {
-    const dataBuffer = fs.readFileSync(filePath);
-    const data = await pdfParse(dataBuffer);
-    return data.text;
-  } else {
-    throw new Error("Unsupported file format: " + ext);
   }
+
+  if (ext === ".pdf") {
+    const dataBuffer = fs.readFileSync(filePath);
+
+    // pdf-parse occasionally returns an empty string on some PDFs (e.g. scanned/encrypted).
+    // Treat empty-after-trim as a failure and try a best-effort fallback.
+    const data = await pdfParse(dataBuffer);
+    const text = (data?.text || "").toString();
+    if (text.trim()) return text;
+
+    // Fallback (best-effort): pull long ASCII-like runs from the raw PDF buffer.
+    // This avoids adding new dependencies and can rescue some “text-based” PDFs.
+    try {
+      const latin1 = dataBuffer.toString("latin1");
+      const matches = latin1.match(/[\x20-\x7E]{30,}/g) || [];
+      const joined = matches.join("\n").trim();
+      if (joined) return joined;
+    } catch (_) {}
+
+    return "";
+  }
+
+  throw new Error("Unsupported file format: " + ext);
 }
 
 // ~1 token ≈ 3–4 chars on average; keep chunk under 400 tokens → ~1200 chars

@@ -148,7 +148,7 @@ build_llama_from_source() {
     fi
     
     find bin . -maxdepth 2 -type f -name "llama-*" -not -name "*.*" -exec cp {} "$dest_dir/" \; 2>/dev/null || true
-    find . -maxdepth 2 \( -type f -o -type l \) \( -name "*.so" -o -name "*.so.*" \) -exec cp -L {} "$dest_dir/" \; 2>/dev/null || true
+    find . -maxdepth 2 \( -type f -o -type l \) \( -name "*.so" -o -name "*.so.*" -o -name "*.dylib" -o -name "*.dylib.*" \) -exec cp -L {} "$dest_dir/" \; 2>/dev/null || true
     
     echo "   OK   llama.cpp $backend backend compiled and installed successfully from source."
     cd "$PUSHED_DIR"
