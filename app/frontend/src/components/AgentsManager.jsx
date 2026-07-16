@@ -1254,7 +1254,7 @@ export default function AgentsManager({ showAlert, showConfirm, selectedAgentIdF
                           handleSendPlaygroundChat();
                         }
                       }}
-                      placeholder="Отправьте проверочное сообщение агенту... (Shift+Enter — новая строка)"
+                      placeholder="Отправьте сообщение агенту... (Shift+Enter — новая строка)"
                       disabled={isChatSending && !abortControllerRef.current}
                       rows={1}
                       style={{ background: "transparent" }}
