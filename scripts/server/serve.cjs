@@ -7821,9 +7821,17 @@ async function getLlmfitRecommendations(useCase = "chat", limit = 10) {
       }
 
       // RAG context search
+      let userPromptText = "";
+      if (typeof message === "string") {
+        userPromptText = message;
+      } else if (Array.isArray(message)) {
+        const textItem = message.find(item => item.type === "text");
+        userPromptText = textItem ? textItem.text : "";
+      }
+
       let retrievedContext = "";
       try {
-        retrievedContext = await performRagSearch(message, agent.id, agent.rag_scope);
+        retrievedContext = await performRagSearch(userPromptText, agent.id, agent.rag_scope);
       } catch (err) {
         console.error("  [agent-rag] Search failed:", err);
       }
@@ -7847,28 +7855,133 @@ async function getLlmfitRecommendations(useCase = "chat", limit = 10) {
         { role: "user", content: message }
       ];
 
-      // Call local LLM
-      const result = await requestJson(`http://127.0.0.1:${PORT_LLM}/v1/chat/completions`, {
-        messages: messages,
-        temperature: 0.7
-      }, 300000);
+      // Web Search integration
+      const webAugmentation = await augmentMessagesWithWebSearch(messages, body);
 
-      const assistantReply = result.choices?.[0]?.message?.content || "";
+      const requestData = JSON.stringify({
+        model: llmSettings.model || "local-model",
+        messages: webAugmentation.messages,
+        temperature: 0.7,
+        stream: true,
+        enableThinking: body.enableThinking === true
+      });
 
-      // Save to database
+      // Write user message to DB immediately
       dbRun(
         "INSERT INTO agent_chats (id, agent_id, role, content, created_at) VALUES (?, ?, ?, ?, ?);",
-        [crypto.randomUUID(), id, "user", message, new Date().toISOString()]
-      );
-      dbRun(
-        "INSERT INTO agent_chats (id, agent_id, role, content, created_at) VALUES (?, ?, ?, ?, ?);",
-        [crypto.randomUUID(), id, "assistant", assistantReply, new Date().toISOString()]
+        [crypto.randomUUID(), id, "user", userPromptText, new Date().toISOString()]
       );
 
-      return json(res, 200, { ok: true, reply: assistantReply });
+      // Start SSE Streaming Request
+      const clientReq = http.request({
+        hostname: "127.0.0.1",
+        port: PORT_LLM,
+        path: "/v1/chat/completions",
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Content-Length": Buffer.byteLength(requestData),
+        },
+        agent: llmHttpAgent,
+      }, (clientRes) => {
+        if (clientRes.statusCode < 200 || clientRes.statusCode >= 300) {
+          let errorBody = "";
+          clientRes.setEncoding("utf8");
+          clientRes.on("data", (chunk) => { errorBody += chunk; });
+          clientRes.on("end", () => {
+            let errMsg = `Text backend returned HTTP ${clientRes.statusCode}`;
+            try {
+              errMsg = JSON.parse(errorBody || "{}").error?.message || errMsg;
+            } catch (_) {}
+            if (!res.headersSent) {
+              json(res, clientRes.statusCode || 500, { ok: false, error: errMsg });
+            }
+          });
+          return;
+        }
+
+        res.writeHead(200, {
+          "Content-Type": "text/event-stream; charset=utf-8",
+          "Cache-Control": "no-cache, no-transform",
+          "Connection": "keep-alive",
+          "X-Accel-Buffering": "no",
+          "X-Content-Type-Options": "nosniff",
+        });
+        const socket = res.socket || res.connection;
+        socket?.setNoDelay?.(true);
+        res.flushHeaders?.();
+
+        if (webAugmentation.webSources.length) {
+          res.write(`event: web_sources\ndata: ${JSON.stringify({ sources: webAugmentation.webSources })}\n\n`);
+        }
+
+        let fullReply = "";
+        let fullReasoning = "";
+        let chunkBuffer = "";
+
+        clientRes.on("data", (chunk) => {
+          res.write(chunk);
+          
+          chunkBuffer += chunk.toString("utf8");
+          let lines = chunkBuffer.split("\n");
+          chunkBuffer = lines.pop() || "";
+          
+          for (let line of lines) {
+            line = line.trim();
+            if (!line.startsWith("data:")) continue;
+            const dataStr = line.slice(5).trim();
+            if (dataStr === "[DONE]") continue;
+            try {
+              const parsed = JSON.parse(dataStr);
+              const choice = parsed.choices?.[0];
+              const token = choice?.delta?.content ?? choice?.message?.content ?? choice?.text ?? parsed.content ?? parsed.response;
+              if (token) fullReply += token;
+              const reasoning = choice?.delta?.reasoning_content ?? choice?.delta?.reasoning ?? choice?.delta?.thinking ?? choice?.message?.reasoning_content ?? parsed.reasoning_content;
+              if (reasoning) fullReasoning += reasoning;
+            } catch (_) {}
+          }
+        });
+
+        clientRes.on("end", () => {
+          let savedContent = fullReply;
+          if (fullReasoning) {
+            savedContent = `<think>\n${fullReasoning}\n</think>\n${fullReply}`;
+          }
+          dbRun(
+            "INSERT INTO agent_chats (id, agent_id, role, content, created_at) VALUES (?, ?, ?, ?, ?);",
+            [crypto.randomUUID(), id, "assistant", savedContent, new Date().toISOString()]
+          );
+          res.end();
+        });
+
+        clientRes.on("error", (err) => {
+          console.error("  [agent-chat] clientRes stream error:", err);
+          if (!res.writableEnded) res.destroy(err);
+        });
+      });
+
+      clientReq.on("error", (err) => {
+        console.error("  [agent-chat] clientReq error:", err);
+        if (!res.headersSent) {
+          res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ ok: false, error: err.message }));
+        } else {
+          res.end();
+        }
+      });
+
+      clientReq.write(requestData);
+      clientReq.end();
+
+      res.on("close", () => {
+        if (!res.writableEnded && !clientReq.destroyed) clientReq.destroy();
+      });
+
     } catch (err) {
       console.error("  [agent-chat] Chat processing failed:", err);
-      return json(res, 500, { ok: false, error: err.message });
+      if (!res.headersSent) {
+        return json(res, 500, { ok: false, error: err.message });
+      }
     }
   }
 

@@ -1305,4 +1305,128 @@ export async function getGenerationProgress() {
   }
 }
 
+export async function streamAgentChat(agentId, message, options = {}, onToken = () => {}) {
+  const fetchOpts = {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      message,
+      useWeb: options.useWeb === true,
+      timeFilter: options.timeFilter || "any",
+      enableThinking: options.enableThinking === true
+    }),
+  };
+  if (options.signal) {
+    fetchOpts.signal = options.signal;
+  }
+  const res = await fetch(`/api/agents/${agentId}/chat`, fetchOpts);
+
+  if (!res.ok) {
+    const data = await readJsonResponse(res, `Chat request failed (HTTP ${res.status}).`);
+    throw new Error(data.error || `Chat request failed (HTTP ${res.status}).`);
+  }
+  if (!res.body) throw new Error("Streaming is not supported by this browser.");
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder("utf-8");
+  let buffer = "";
+  let content = "";
+  let reasoningContent = "";
+  let usage = null;
+  let timings = null;
+  let finishReason = null;
+  let webSources = [];
+
+  const normalizeTextDelta = (value) => {
+    if (typeof value === "string") return value;
+    if (Array.isArray(value)) {
+      return value.map((item) => {
+        if (typeof item === "string") return item;
+        if (typeof item?.text === "string") return item.text;
+        if (typeof item?.content === "string") return item.content;
+        return "";
+      }).join("");
+    }
+    if (value && typeof value === "object") {
+      if (typeof value.text === "string") return value.text;
+      if (typeof value.content === "string") return value.content;
+    }
+    return "";
+  };
+
+  const consumeEvent = (eventText) => {
+    try {
+      const data = eventText
+        .split(/\r?\n/)
+        .filter((line) => line.startsWith("data:"))
+        .map((line) => line.slice(5).trimStart())
+        .join("\n")
+        .trim();
+      if (!data || data === "[DONE]") return data === "[DONE]";
+
+      const eventName = eventText
+        .split(/\r?\n/)
+        .find((line) => line.startsWith("event:"))
+        ?.slice(6)
+        .trim();
+
+      const parsed = JSON.parse(data);
+      if (eventName === "web_sources") {
+        webSources = parsed.sources || [];
+        onToken("", "", "", "", webSources);
+        return false;
+      }
+
+      const choice = parsed.choices?.[0];
+      const token = normalizeTextDelta(
+        choice?.delta?.content ??
+        choice?.message?.content ??
+        choice?.text ??
+        parsed.content ??
+        parsed.response
+      );
+      const reasoningToken = normalizeTextDelta(
+        choice?.delta?.reasoning_content ??
+        choice?.delta?.reasoning ??
+        choice?.delta?.thinking ??
+        choice?.message?.reasoning_content ??
+        parsed.reasoning_content
+      );
+      if (choice?.finish_reason) finishReason = choice.finish_reason;
+
+      if (token || reasoningToken) {
+        content += token;
+        reasoningContent += reasoningToken;
+        onToken(token, content, reasoningToken, reasoningContent, webSources);
+      }
+      if (parsed.usage) usage = parsed.usage;
+      if (parsed.timings) timings = parsed.timings;
+      return false;
+    } catch (err) {
+      console.warn("Failed to parse EventStream JSON:", eventText, err);
+      return false;
+    }
+  };
+
+  let finished = false;
+  while (!finished) {
+    const { done, value } = await reader.read();
+    buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
+
+    const events = buffer.split(/\r?\n\r?\n/);
+    buffer = events.pop() || "";
+    for (const eventText of events) {
+      if (consumeEvent(eventText)) {
+        finished = true;
+        break;
+      }
+    }
+    if (done) break;
+  }
+
+  if (!finished && buffer.trim()) consumeEvent(buffer);
+  return { content, reasoningContent, usage, timings, finishReason, webSources };
+}
+
+
 

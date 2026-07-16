@@ -1,5 +1,98 @@
-import React, { useState, useEffect, useRef } from "react";
-import { Cpu, Plus, Trash2, Play, StopCircle, UploadCloud, MessageSquare, Settings, Database, Activity, FileText, Terminal, Loader2 } from "lucide-react";
+import React, { useState, useEffect, useRef, useCallback, useLayoutEffect } from "react";
+import { Cpu, Plus, Trash2, Play, StopCircle, UploadCloud, MessageSquare, Settings, Database, Activity, FileText, Terminal, Loader2, ChevronDown, Bot, Send, Square, Paperclip, Globe2, X } from "lucide-react";
+import { streamAgentChat, getLlmStatus } from "../services/api";
+import { MarkdownRenderer } from "./TextChat";
+
+const processMessageContent = (rawText, apiReasoning = "", enableThinking = true) => {
+  if (typeof rawText !== "string") {
+    return { content: rawText, reasoning: apiReasoning || "" };
+  }
+
+  const cleanReasoningControlTags = (value) => String(value || "")
+    .replace(/<\|channel\|>thought/g, "")
+    .replace(/<\|channel\|>model/g, "")
+    .replace(/<\|turn\|>model/g, "")
+    .replace(/<\|im_start\|>model/g, "")
+    .replace(/<\|think\|>|<\|thought\|>|<thinking>|<thought>/g, "")
+    .replace(/<\|\/think\|>|<\|\/thought\|>|<\/thinking>|<\/thought>/g, "")
+    .trim();
+
+  const startTags = ["<|channel|>thought", "<|think|>", "<|thought|>", "<thinking>", "<thought>"];
+  const endTags = ["<|channel|>model", "<|turn>model", "<|im_start|>model", "</thinking>", "</thought>", "<|/think|>", "<|/thought|>"];
+
+  if (!enableThinking) {
+    return { content: cleanReasoningControlTags(rawText), reasoning: "" };
+  }
+
+  let startIdx = -1;
+  let matchedStartTag = "";
+
+  for (const tag of startTags) {
+    const idx = rawText.indexOf(tag);
+    if (idx !== -1 && (startIdx === -1 || idx < startIdx)) {
+      startIdx = idx;
+      matchedStartTag = tag;
+    }
+  }
+
+  if (startIdx === -1) {
+    return { content: cleanReasoningControlTags(rawText), reasoning: "" };
+  }
+
+  let endIdx = -1;
+  for (const tag of endTags) {
+    const idx = rawText.indexOf(tag, startIdx + matchedStartTag.length);
+    if (idx !== -1 && (endIdx === -1 || idx < endIdx)) {
+      endIdx = idx;
+    }
+  }
+
+  if (endIdx === -1) {
+    const rawReasoning = rawText.substring(startIdx + matchedStartTag.length);
+    return { content: "", reasoning: cleanReasoningControlTags(rawReasoning) };
+  }
+
+  const rawReasoning = rawText.substring(startIdx + matchedStartTag.length, endIdx);
+  const rawContent = rawText.substring(endIdx);
+
+  return {
+    content: cleanReasoningControlTags(rawContent),
+    reasoning: cleanReasoningControlTags(rawReasoning)
+  };
+};
+
+function ChatThinkingSection({ reasoning, timeElapsed, isComplete }) {
+  const [isExpanded, setIsExpanded] = useState(true);
+
+  const formattedTime = timeElapsed > 0 
+    ? ` (${timeElapsed.toFixed(timeElapsed < 10 ? 1 : 0)}s)`
+    : "";
+
+  return (
+    <div className="chat-thinking-container">
+      <button
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="chat-thinking-header"
+      >
+        <span className="chat-thinking-title">
+          {isComplete ? `Ход мыслей${formattedTime}` : `Думает...${formattedTime}`}
+        </span>
+        <ChevronDown
+          size={14}
+          style={{
+            transform: isExpanded ? "rotate(180deg)" : "rotate(0deg)",
+            transition: "transform 0.2s ease",
+          }}
+        />
+      </button>
+      {isExpanded && (
+        <div className="chat-thinking-content">
+          {reasoning}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function AgentsManager({ showAlert, showConfirm, selectedAgentIdForChat, setSelectedAgentIdForChat }) {
   const [agents, setAgents] = useState([]);
@@ -30,7 +123,132 @@ export default function AgentsManager({ showAlert, showConfirm, selectedAgentIdF
   const [chatInput, setChatInput] = useState("");
   const [isChatSending, setIsChatSending] = useState(false);
 
+  const [status, setStatus] = useState({ ready: false, running: false, settings: {} });
+  const [attachments, setAttachments] = useState([]);
+  const [useWebSearch, setUseWebSearch] = useState(false);
+  const [deepThinkEnabled, setDeepThinkEnabled] = useState(false);
+  const [webTimeFilter, setWebTimeFilter] = useState("any");
+  const composerFileInputRef = useRef(null);
+
+  const supportsVision = Boolean(status.ready && status.settings?.supportsVision);
+  const supportsThinking = Boolean(status.ready && status.settings?.supportsThinking);
+  const visionStatus = status.settings?.visionStatus || "Ввод изображений требует mmproj-файла проектора.";
+
+  const isImage = (file) => {
+    return /\.(jpe?g|png|webp)$/i.test(file.name) || file.type.startsWith("image/");
+  };
+
+  const isTextFile = (file) => {
+    return /\.(txt|md|csv|js|jsx|ts|tsx|py|json|css|html|java|cpp|c|h|rs|go|sh|bat|xml|yaml|yml)$/i.test(file.name) || file.type.startsWith("text/");
+  };
+
+  const optimizeImageForVision = (file, maxSide = 1024, quality = 0.92) => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error(`Could not read ${file.name}`));
+    reader.onload = () => {
+      const originalDataUrl = reader.result;
+      const img = new Image();
+      img.onerror = () => reject(new Error(`Could not decode ${file.name}`));
+      img.onload = () => {
+        const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+        const width = Math.max(1, Math.round(img.width * scale));
+        const height = Math.max(1, Math.round(img.height * scale));
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, width, height);
+        const sendDataUrl = canvas.toDataURL("image/jpeg", quality);
+        resolve({
+          previewDataUrl: originalDataUrl,
+          sendDataUrl,
+          originalWidth: img.width,
+          originalHeight: img.height,
+          width,
+          height,
+        });
+      };
+      img.src = originalDataUrl;
+    };
+    reader.readAsDataURL(file);
+  });
+
+  const handleComposerFileChange = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    for (const file of files) {
+      if (isImage(file)) {
+        try {
+          const optimized = await optimizeImageForVision(file);
+          setAttachments(prev => [...prev, {
+            id: "att_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7),
+            name: file.name,
+            type: "image",
+            dataUrl: optimized.sendDataUrl,
+          }]);
+        } catch (err) {
+          await showAlert({ title: "Ошибка", message: `Не удалось обработать изображение ${file.name}: ${err.message}`, danger: true });
+        }
+      } else if (isTextFile(file)) {
+        if (file.size > 2 * 1024 * 1024) {
+          await showAlert({ title: "Файл слишком большой", message: `Файл ${file.name} превышает лимит 2 МБ.`, danger: true });
+          continue;
+        }
+        const reader = new FileReader();
+        reader.onload = (evt) => {
+          setAttachments(prev => [...prev, {
+            id: "att_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7),
+            name: file.name,
+            type: "document",
+            content: evt.target.result,
+          }]);
+        };
+        reader.readAsText(file);
+      } else {
+        await showAlert({ title: "Формат не поддерживается", message: `Файл ${file.name} должен быть изображением (JPG/PNG/WebP) или текстовым документом.`, danger: true });
+      }
+    }
+    e.target.value = "";
+  };
+
+  const updateLlmStatus = async () => {
+    try {
+      const s = await getLlmStatus();
+      setStatus(s);
+    } catch (_) {}
+  };
+
+  useEffect(() => {
+    if (activeSubTab === "chat") {
+      updateLlmStatus();
+    }
+  }, [activeSubTab]);
+
   const [isCreateMode, setIsCreateMode] = useState(false);
+
+  const chatMessagesRef = useRef(null);
+  const textareaRef = useRef(null);
+  const abortControllerRef = useRef(null);
+
+  const resizeComposerInput = useCallback(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    const maxHeight = 104;
+    textarea.style.height = "auto";
+    textarea.style.height = `${Math.min(textarea.scrollHeight, maxHeight)}px`;
+    textarea.style.overflowY = textarea.scrollHeight > maxHeight ? "auto" : "hidden";
+  }, []);
+
+  useLayoutEffect(() => {
+    resizeComposerInput();
+  }, [chatInput, resizeComposerInput]);
+
+  useEffect(() => {
+    if (chatMessagesRef.current) {
+      chatMessagesRef.current.scrollTop = chatMessagesRef.current.scrollHeight;
+    }
+  }, [chatMessages]);
 
   // Load list of agents
   const fetchAgents = async () => {
@@ -356,29 +574,130 @@ export default function AgentsManager({ showAlert, showConfirm, selectedAgentIdF
 
   // Playground Chat API
   const handleSendPlaygroundChat = async () => {
-    if (!chatInput.trim() || !selectedAgent) return;
+    if ((!chatInput.trim() && attachments.length === 0) || !selectedAgent || isChatSending) return;
 
-    const userMsg = { role: "user", content: chatInput };
+    // Document context blocks
+    let documentContext = "";
+    attachments.filter(att => att.type === "document").forEach((att) => {
+      documentContext += `\n[Attached File: ${att.name}]\n${att.content}\n`;
+    });
+
+    const imageAttachments = attachments.filter(att => att.type === "image");
+    const displayCombinedText = documentContext
+      ? [chatInput.trim(), documentContext].filter(Boolean).join("\n\n").trim()
+      : chatInput.trim();
+
+    let requestUserMessageContent;
+    if (imageAttachments.length > 0) {
+      requestUserMessageContent = [
+        {
+          type: "text",
+          text: displayCombinedText
+        },
+        ...imageAttachments.map((img) => ({
+          type: "image_url",
+          image_url: {
+            url: img.dataUrl
+          }
+        }))
+      ];
+    } else {
+      requestUserMessageContent = displayCombinedText;
+    }
+
+    const userMsg = { role: "user", content: requestUserMessageContent };
     setChatMessages(prev => [...prev, userMsg]);
     setChatInput("");
+    setAttachments([]); // Clear attachments
     setIsChatSending(true);
 
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
+    // Insert assistant placeholder for streaming
+    setChatMessages(prev => [...prev, { role: "assistant", content: "", reasoning: "", thinkingDuration: 0, webSources: [] }]);
+
+    const requestStartedAt = performance.now();
+    let streamedTokens = 0;
+    let firstTokenAt = null;
+    let thinkingStartedAt = null;
+    let thinkingEndedAt = null;
+    let thinkingDuration = 0;
+
     try {
-      const chatRes = await fetch(`/api/agents/${selectedAgent.id}/chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: userMsg.content })
+      await streamAgentChat(selectedAgent.id, requestUserMessageContent, {
+        useWeb: useWebSearch,
+        timeFilter: webTimeFilter,
+        enableThinking: deepThinkEnabled,
+        signal: controller.signal
+      }, (token, fullText, reasoningToken, fullReasoning, webSources) => {
+        const now = performance.now();
+        if (streamedTokens === 0) {
+          firstTokenAt = now;
+        }
+        streamedTokens += 1;
+
+        if (reasoningToken && !thinkingStartedAt) {
+          thinkingStartedAt = now;
+        }
+        if (token && thinkingStartedAt && !thinkingEndedAt) {
+          thinkingEndedAt = now;
+          thinkingDuration = (thinkingEndedAt - thinkingStartedAt) / 1000;
+        }
+
+        const currentThinkingDuration = thinkingEndedAt 
+          ? thinkingDuration 
+          : (thinkingStartedAt ? (now - thinkingStartedAt) / 1000 : 0);
+
+        setChatMessages(prev => {
+          const updated = [...prev];
+          if (updated.length > 0) {
+            const last = updated[updated.length - 1];
+            if (last.role === "assistant") {
+              last.content = fullText;
+              last.reasoning = fullReasoning;
+              last.thinkingDuration = currentThinkingDuration;
+              if (webSources) {
+                last.webSources = webSources;
+              }
+            }
+          }
+          return updated;
+        });
       });
-      const data = await chatRes.json();
-      if (chatRes.ok && data.reply) {
-        setChatMessages(prev => [...prev, { role: "assistant", content: data.reply }]);
-      } else {
-        setChatMessages(prev => [...prev, { role: "assistant", content: `Ошибка: ${data.error || "Не удалось получить ответ."}` }]);
-      }
     } catch (err) {
-      setChatMessages(prev => [...prev, { role: "assistant", content: `Ошибка сети: ${err.message}` }]);
+      if (err.name === "AbortError") {
+        setChatMessages(prev => {
+          const updated = [...prev];
+          if (updated.length > 0) {
+            const last = updated[updated.length - 1];
+            if (last.role === "assistant") {
+              last.content += "\n\n[Генерация остановлена пользователем]";
+            }
+          }
+          return updated;
+        });
+      } else {
+        setChatMessages(prev => {
+          const updated = [...prev];
+          if (updated.length > 0) {
+            const last = updated[updated.length - 1];
+            if (last.role === "assistant") {
+              last.content = `Ошибка: ${err.message || "Не удалось получить ответ."}`;
+            }
+          }
+          return updated;
+        });
+      }
     } finally {
       setIsChatSending(false);
+      abortControllerRef.current = null;
+    }
+  };
+
+  const handleStopPlaygroundChat = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
     }
   };
 
@@ -740,36 +1059,109 @@ export default function AgentsManager({ showAlert, showConfirm, selectedAgentIdF
                   <Trash2 size={14} /> Очистить историю
                 </button>
               </div>
+
               {/* Chat Message List */}
-              <div style={{ flex: 1, overflowY: "auto", padding: "20px", display: "flex", flexDirection: "column", gap: "12px" }}>
+              <div 
+                ref={chatMessagesRef}
+                className="chat-messages"
+                style={{ flex: 1, overflowY: "auto", padding: "20px", display: "flex", flexDirection: "column", gap: "16px" }}
+              >
                 {chatMessages.length === 0 ? (
-                  <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", opacity: 0.5, gap: "10px" }}>
-                    <MessageSquare size={36} />
-                    <span style={{ fontSize: "0.9rem" }}>Быстрое тестирование промпта Агента</span>
+                  <div className="chat-empty" style={{ margin: "auto", textAlign: "center", padding: "40px 20px" }}>
+                    <div className="chat-empty-icon" style={{ display: "inline-flex", background: "var(--md-sys-color-primary-container)", color: "var(--md-sys-color-on-primary-container)", padding: "16px", borderRadius: "50%", marginBottom: "16px" }}>
+                      <Cpu size={32} />
+                    </div>
+                    <h3 style={{ margin: "0 0 8px 0", fontWeight: "600", color: "var(--md-sys-color-on-surface)" }}>Чат с агентом {selectedAgent?.name}</h3>
+                    <p style={{ margin: 0, fontSize: "0.88rem", color: "var(--md-sys-color-outline)", maxWidth: "360px", lineHeight: 1.5 }}>
+                      Начните общение с вашим настроенным ИИ-агентом. Все сообщения будут сохранены в его памяти для обучения.
+                    </p>
                   </div>
                 ) : (
                   chatMessages.map((msg, idx) => {
                     const isUser = msg.role === "user";
+                    const processed = processMessageContent(
+                      msg.content || "",
+                      msg.reasoning || "",
+                      true
+                    );
+                    const displayContent = processed.content;
+                    const displayReasoning = processed.reasoning;
+                    const hasDisplayContent = displayContent && (
+                      typeof displayContent === "string" 
+                        ? Boolean(displayContent.trim())
+                        : Array.isArray(displayContent) && displayContent.length > 0
+                    );
+
                     return (
                       <div 
                         key={idx} 
-                        style={{ 
-                          display: "flex", 
-                          justifyContent: isUser ? "flex-end" : "flex-start" 
-                        }}
+                        className={`chat-message-row ${isUser ? "user" : "ai"}`}
                       >
-                        <div 
-                          style={{ 
-                            maxWidth: "75%", 
-                            padding: "10px 14px", 
-                            borderRadius: "12px", 
-                            background: isUser ? "var(--md-sys-color-primary)" : "var(--md-sys-color-surface-container-high)", 
-                            color: isUser ? "var(--md-sys-color-on-primary)" : "var(--md-sys-color-on-surface)",
-                            fontSize: "0.88rem",
-                            whiteSpace: "pre-wrap"
-                          }}
-                        >
-                          {msg.content}
+                        <div className={`chat-avatar ${isUser ? "user" : "ai"}`}>
+                          {isUser ? "Вы" : "ИИ"}
+                        </div>
+                        <div className="chat-bubble-wrap">
+                          <span className="chat-sender-label">
+                            {isUser ? "Вы" : (selectedAgent?.name || "Агент")}
+                          </span>
+                          {!isUser && displayReasoning && (
+                            <ChatThinkingSection
+                              reasoning={displayReasoning}
+                              timeElapsed={msg.thinkingDuration}
+                              isComplete={!isChatSending || idx < chatMessages.length - 1}
+                            />
+                          )}
+                          {hasDisplayContent && (
+                            <div className="chat-bubble">
+                              {Array.isArray(displayContent) ? (
+                                <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                                  {displayContent.map((item, itemIdx) => {
+                                    if (item.type === "text") return <MarkdownRenderer key={itemIdx} content={item.text} />;
+                                    if (item.type === "image_url") return (
+                                      <img 
+                                        key={itemIdx} 
+                                        src={item.image_url.url} 
+                                        alt="Attached preview"
+                                        style={{ maxWidth: "240px", maxHeight: "180px", objectFit: "contain", borderRadius: "8px", marginTop: "4px" }}
+                                      />
+                                    );
+                                    return null;
+                                  })}
+                                </div>
+                              ) : (
+                                <MarkdownRenderer content={displayContent} />
+                              )}
+                            </div>
+                          )}
+                          {msg.role === "assistant" && Array.isArray(msg.webSources) && msg.webSources.length > 0 && (
+                            <div style={{
+                              marginTop: "8px",
+                              display: "flex",
+                              flexWrap: "wrap",
+                              gap: "6px"
+                            }}>
+                              {msg.webSources.map((source, sourceIndex) => (
+                                <a 
+                                  key={sourceIndex}
+                                  href={source.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="chat-web-source-pill"
+                                  style={{
+                                    fontSize: "0.75rem",
+                                    padding: "4px 8px",
+                                    borderRadius: "12px",
+                                    background: "var(--md-sys-color-surface-container-high)",
+                                    color: "var(--md-sys-color-primary)",
+                                    border: "1px solid var(--border-color)",
+                                    textDecoration: "none"
+                                  }}
+                                >
+                                  [{source.index || sourceIndex + 1}] {source.title || source.url}
+                                </a>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       </div>
                     );
@@ -778,23 +1170,146 @@ export default function AgentsManager({ showAlert, showConfirm, selectedAgentIdF
               </div>
 
               {/* Chat Input Bar */}
-              <div style={{ padding: "16px", borderTop: "1px solid var(--border-color)", display: "flex", gap: "10px", background: "var(--md-sys-color-surface-container-low)" }}>
-                <input 
-                  type="text" 
-                  value={chatInput} 
-                  onChange={e => setChatInput(e.target.value)}
-                  onKeyDown={e => e.key === "Enter" && handleSendPlaygroundChat()}
-                  placeholder="Отправьте проверочное сообщение агенту..."
-                  disabled={isChatSending}
-                  style={{ flex: 1, padding: "10px 14px", borderRadius: "8px", border: "1px solid var(--border-color)", background: "var(--md-sys-color-surface-container-high)", color: "var(--md-sys-color-on-surface)", fontSize: "0.88rem" }}
-                />
-                <button 
-                  onClick={handleSendPlaygroundChat}
-                  disabled={isChatSending || !chatInput.trim()}
-                  style={{ padding: "10px 20px", borderRadius: "8px", background: "var(--md-sys-color-primary)", color: "var(--md-sys-color-on-primary)", border: "none", cursor: "pointer", fontWeight: "600", fontSize: "0.88rem" }}
-                >
-                  {isChatSending ? "..." : "Отправить"}
-                </button>
+              <div className="chat-composer" style={{ borderTop: "1px solid var(--border-color)", background: "var(--md-sys-color-surface-container-low)" }}>
+                <div className="chat-composer-inner">
+                  <input 
+                    type="file" 
+                    ref={composerFileInputRef} 
+                    multiple 
+                    onChange={handleComposerFileChange} 
+                    style={{ display: "none" }} 
+                  />
+
+                  {attachments.length > 0 && (
+                    <div className="chat-attachments" style={{ display: "flex", flexWrap: "wrap", gap: "8px", padding: "8px 12px", borderBottom: "1px solid var(--border-color)" }}>
+                      {attachments.map(att => (
+                        <div 
+                          key={att.id} 
+                          className="chat-attachment-pill"
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "6px",
+                            fontSize: "0.75rem",
+                            padding: "4px 8px",
+                            borderRadius: "6px",
+                            background: "var(--md-sys-color-surface-container-high)",
+                            border: "1px solid var(--border-color)",
+                            color: "var(--md-sys-color-on-surface)"
+                          }}
+                        >
+                          {att.type === "image" ? (
+                            <img src={att.dataUrl} alt={att.name} style={{ width: "16px", height: "16px", objectFit: "cover", borderRadius: "3px" }} />
+                          ) : (
+                            <FileText size={13} className="color-primary" />
+                          )}
+                          <span style={{ maxWidth: "120px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{att.name}</span>
+                          <button 
+                            onClick={() => setAttachments(prev => prev.filter(a => a.id !== att.id))}
+                            style={{ background: "transparent", border: "none", padding: 0, cursor: "pointer", display: "flex", color: "var(--md-sys-color-outline)" }}
+                          >
+                            <X size={12} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="chat-composer-textarea-container">
+                    <textarea 
+                      ref={textareaRef}
+                      className="chat-composer-textarea"
+                      value={chatInput} 
+                      onChange={e => {
+                        setChatInput(e.target.value);
+                        resizeComposerInput();
+                      }}
+                      onKeyDown={e => {
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                          handleSendPlaygroundChat();
+                        }
+                      }}
+                      placeholder="Отправьте проверочное сообщение агенту... (Shift+Enter — новая строка)"
+                      disabled={isChatSending && !abortControllerRef.current}
+                      rows={1}
+                      style={{ background: "transparent" }}
+                    />
+                  </div>
+                  <div className="chat-composer-toolbar" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div className="chat-composer-toolbar-left" style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                      <button 
+                        className="chat-composer-tool-btn"
+                        onClick={() => composerFileInputRef.current?.click()}
+                        title="Прикрепить изображение или текстовый файл"
+                        style={{ background: "transparent", border: "none", cursor: "pointer", display: "flex", padding: "6px", borderRadius: "4px", color: "var(--md-sys-color-outline)" }}
+                      >
+                        <Paperclip size={16} />
+                      </button>
+                      
+                      <button 
+                        className={`chat-composer-tool-btn ${useWebSearch ? "active" : ""}`}
+                        onClick={() => setUseWebSearch(!useWebSearch)}
+                        title="Поиск в Web"
+                        style={{
+                          background: "transparent",
+                          border: "none",
+                          cursor: "pointer",
+                          display: "flex",
+                          padding: "6px",
+                          borderRadius: "4px",
+                          color: useWebSearch ? "var(--md-sys-color-primary)" : "var(--md-sys-color-outline)"
+                        }}
+                      >
+                        <Globe2 size={16} />
+                      </button>
+
+                      {supportsThinking && (
+                        <label 
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "6px",
+                            cursor: "pointer",
+                            fontSize: "0.75rem",
+                            color: deepThinkEnabled ? "var(--md-sys-color-primary)" : "var(--md-sys-color-outline)",
+                            marginLeft: "4px",
+                            userSelect: "none"
+                          }}
+                        >
+                          <input 
+                            type="checkbox"
+                            checked={deepThinkEnabled}
+                            onChange={(e) => setDeepThinkEnabled(e.target.checked)}
+                            style={{ margin: 0, width: "13px", height: "13px" }}
+                          />
+                          <span>Deep Think</span>
+                        </label>
+                      )}
+                    </div>
+
+                    <div className="chat-composer-toolbar-right">
+                      {isChatSending ? (
+                        <button 
+                          className="chat-composer-stop-btn" 
+                          onClick={handleStopPlaygroundChat}
+                          title="Остановить генерацию"
+                        >
+                          <Square size={15} fill="currentColor" />
+                        </button>
+                      ) : (
+                        <button 
+                          className="chat-composer-send-btn" 
+                          onClick={handleSendPlaygroundChat}
+                          disabled={!chatInput.trim() && attachments.length === 0}
+                          title="Отправить сообщение"
+                        >
+                          <Send size={17} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
               </div>
 
             </div>

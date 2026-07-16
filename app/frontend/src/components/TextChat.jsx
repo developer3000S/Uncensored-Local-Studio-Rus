@@ -1070,9 +1070,9 @@ function TextChat({
                         {message.role === "user" ? "Вы" : "Локальный ИИ"}
                       </span>
                       {message.role === "assistant" && displayReasoning && deepThinkEnabled && (
-                        <ThinkingBlock
+                        <ChatThinkingSection
                           reasoning={displayReasoning}
-                          thinkingDuration={message.thinkingDuration}
+                          timeElapsed={message.thinkingDuration}
                           isComplete={!message.generationStats || message.generationStats.status === "complete"}
                         />
                       )}

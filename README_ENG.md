@@ -187,14 +187,14 @@ AI Studio features a built-in engine for local AI agents and a SQLite-powered RA
 
 ### Key Capabilities:
 * **Global Sidebar Navigation**: The list of your custom agents is displayed in the main sidebar dropdown. You can switch between them instantly or create a new agent via the `+ Create agent...` button.
-* **Direct Agent Chat**: Clicking an agent in the sidebar immediately opens the chat workspace configured specifically for that helper.
+* **Direct Agent Chat**: Clicking an agent in the sidebar immediately opens the chat workspace configured specifically for that helper. The chat features the exact same capabilities as the main Text Chat: local file attachments (inline text parsing for documents, vision support for images), real-time Web Search with source citations, Deep Thinking options for reasoning models, token-by-token streaming, Markdown formatting, collapsible thinking blocks with timers, and the ability to abort/stop generation.
 * **Persistent Memory & Learning**: All chats with your agent are saved to the database (`agent_chats`). The agent has continuous access to its message history (the last 20 messages are passed as a sliding context window) both in the playground chat and during background task execution. You can clear the history at any time with the "Clear history" button.
 * **Custom Configuration**: Assign a name, description, and custom system prompt to define your agent's personality and behavior guidelines.
 * **Local Knowledge Base (RAG)**: Upload documents in `.pdf`, `.txt`, and `.md` formats. The engine chunks text, generates vector embeddings, and stores them in the local `studio.db` database.
 * **Personal or Shared RAG Access**: Limit loaded documents to a single agent ("Personal RAG") or make them globally accessible ("Shared RAG").
 * **Sequential Background Job Queue (FIFO)**: Queue long-running tasks in the background. Tasks are processed sequentially to protect your GPU VRAM from memory exhaustion. Includes a real-time interactive terminal logs viewer.
 
-All agent configurations, files, vector chunks, and jobs are saved locally in the `app/config/studio.db` SQLite database.
+All agent configurations, persistent chat history, uploaded files, vector embeddings, and background tasks are stored locally in the relational SQLite database at `app/config/studio.db`. Data chunking and vector processing are performed locally for maximum privacy.
 
 ---
 
