@@ -429,7 +429,7 @@ export default function AgentsManager({ showAlert, showConfirm, selectedAgentIdF
                 onClick={() => setActiveSubTab("chat")}
                 style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 16px", borderRadius: "20px", border: "none", cursor: "pointer", background: activeSubTab === "chat" ? "var(--md-sys-color-primary-container)" : "transparent", color: activeSubTab === "chat" ? "var(--md-sys-color-on-primary-container)" : "inherit", fontWeight: "500", fontSize: "0.85rem" }}
               >
-                <MessageSquare size={16} /> Чат-отладка
+                <MessageSquare size={16} /> Чат
               </button>
             </div>
           )}

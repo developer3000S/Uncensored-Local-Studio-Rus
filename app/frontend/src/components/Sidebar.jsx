@@ -1,5 +1,5 @@
 import React, { memo, useState, useEffect } from "react";
-import { Image, FolderDown, MessageSquare, Mic, Settings, Shield, Terminal, ChevronDown, ChevronUp, Trash2, Volume2, Cpu } from "lucide-react";
+import { Image, FolderDown, MessageSquare, Mic, Settings, Shield, Terminal, ChevronDown, ChevronUp, Trash2, Volume2, Cpu, Plus } from "lucide-react";
 
 function formatSidebarDate(value) {
   const date = new Date(value);
