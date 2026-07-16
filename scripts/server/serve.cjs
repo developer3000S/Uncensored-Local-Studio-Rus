@@ -5973,7 +5973,7 @@ async function extractText(filePath, filename) {
   }
 }
 
-function chunkText(text, size = 800, overlap = 100) {
+function chunkText(text, size = 300, overlap = 50) {
   const chunks = [];
   let index = 0;
   while (index < text.length) {
@@ -7900,6 +7900,7 @@ async function getLlmfitRecommendations(useCase = "chat", limit = 10) {
           return;
         }
 
+        if (res.headersSent) return;
         res.writeHead(200, {
           "Content-Type": "text/event-stream; charset=utf-8",
           "Cache-Control": "no-cache, no-transform",
