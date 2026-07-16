@@ -187,11 +187,12 @@ AI Studio features a built-in engine for local AI agents and a SQLite-powered RA
 
 ### Key Capabilities:
 * **Global Sidebar Navigation**: The list of your custom agents is displayed in the main sidebar dropdown. You can switch between them instantly or create a new agent via the `+ Create agent...` button.
-* **Direct Agent Chat**: Clicking an agent in the sidebar immediately opens the chat workspace configured specifically for that helper. The chat features the exact same capabilities as the main Text Chat: local file attachments (inline text parsing for documents, vision support for images), real-time Web Search with source citations, Deep Thinking options for reasoning models, token-by-token streaming, Markdown formatting, collapsible thinking blocks with timers, and the ability to abort/stop generation.
-* **Persistent Memory & Learning**: All chats with your agent are saved to the database (`agent_chats`). The agent has continuous access to its message history (the last 20 messages are passed as a sliding context window) both in the playground chat and during background task execution. You can clear the history at any time with the "Clear history" button.
+* **Direct Agent Chat**: Clicking an agent in the sidebar immediately opens the chat workspace for that helper. Supports token streaming, real-time Web Search with source citations, Deep Thinking for reasoning models, Markdown formatting, and generation abort.
+* **File Attachment → Auto RAG Upload**: Press 📎 in the agent chat composer to attach a document (`.txt`, `.md`, `.pdf`, code files). The file is **automatically uploaded to that agent's RAG knowledge base** — it is chunked, embedded, and indexed immediately without needing to navigate to the Knowledge Base tab. Images are still sent inline for vision models.
+* **Persistent Memory & Learning**: All chats with your agent are saved to the database (`agent_chats`). The agent has continuous access to its message history (the last 20 messages are passed as a sliding context window) both in playground chat and during background task execution. You can clear the history at any time.
 * **Custom Configuration**: Assign a name, description, and custom system prompt to define your agent's personality and behavior guidelines.
-* **Local Knowledge Base (RAG)**: Upload documents in `.pdf`, `.txt`, and `.md` formats. The engine chunks text, generates vector embeddings, and stores them in the local `studio.db` database.
-* **Personal or Shared RAG Access**: Limit loaded documents to a single agent ("Personal RAG") or make them globally accessible ("Shared RAG").
+* **Local Knowledge Base (RAG)**: Upload documents in `.pdf`, `.txt`, and `.md` formats via the Knowledge Base tab or directly through 📎 in the chat. The engine chunks text (~400 chars per chunk), generates vector embeddings locally, and stores them in `studio.db`. On each query, the top-5 semantically relevant chunks are retrieved and injected into the system prompt.
+* **Personal or Shared RAG Access**: Limit loaded documents to a single agent ("Personal RAG") or make them globally accessible to all agents ("Shared RAG").
 * **Sequential Background Job Queue (FIFO)**: Queue long-running tasks in the background. Tasks are processed sequentially to protect your GPU VRAM from memory exhaustion. Includes a real-time interactive terminal logs viewer.
 
 All agent configurations, persistent chat history, uploaded files, vector embeddings, and background tasks are stored locally in the relational SQLite database at `app/config/studio.db`. Data chunking and vector processing are performed locally for maximum privacy.
@@ -234,6 +235,11 @@ All agent configurations, persistent chat history, uploaded files, vector embedd
 ---
 
 ## <a id="troubleshooting-faq"></a>🛠️ Troubleshooting & FAQ
+
+<details>
+  <summary><strong>RAG embedding error: "input is too large to process" (500)</strong></summary>
+  <p>This error occurs when the text sent to the llama.cpp embedding endpoint exceeds the server's physical batch size (default 512 tokens). As of this version, query text is automatically truncated to ~1 500 characters (~400 tokens) before embedding, and RAG chunks are capped at ~400 characters — both safely within the 512-token limit. If the error still appears, make sure you are running the latest <code>scripts/server/serve.cjs</code>.</p>
+</details>
 
 <details>
   <summary><strong> Reset Environment: If a build fails or you want to clear dependencies</strong></summary>

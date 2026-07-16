@@ -5973,7 +5973,8 @@ async function extractText(filePath, filename) {
   }
 }
 
-function chunkText(text, size = 300, overlap = 50) {
+// ~1 token ≈ 3–4 chars on average; keep chunk under 400 tokens → ~1200 chars
+function chunkText(text, size = 400, overlap = 60) {
   const chunks = [];
   let index = 0;
   while (index < text.length) {
@@ -6036,9 +6037,15 @@ function getEmbedding(text) {
 }
 
 async function performRagSearch(queryText, agentId, ragScope) {
+  // Truncate query to ~1500 chars (~400 tokens) to stay within physical batch-size limits.
+  // The last user message (or summary) is sufficient for semantic search.
+  const MAX_EMBED_CHARS = 1500;
+  const safeQuery = queryText.length > MAX_EMBED_CHARS
+    ? queryText.slice(queryText.length - MAX_EMBED_CHARS)  // keep the tail (most relevant part)
+    : queryText;
   let queryEmbedding;
   try {
-    queryEmbedding = await getEmbedding(queryText);
+    queryEmbedding = await getEmbedding(safeQuery);
   } catch (err) {
     console.error("Failed to generate embedding for query:", err.message);
     return "";

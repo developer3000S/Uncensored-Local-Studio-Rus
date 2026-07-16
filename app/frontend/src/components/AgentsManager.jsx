@@ -190,27 +190,41 @@ export default function AgentsManager({ showAlert, showConfirm, selectedAgentIdF
         } catch (err) {
           await showAlert({ title: "Ошибка", message: `Не удалось обработать изображение ${file.name}: ${err.message}`, danger: true });
         }
-      } else if (isTextFile(file)) {
-        if (file.size > 2 * 1024 * 1024) {
-          await showAlert({ title: "Файл слишком большой", message: `Файл ${file.name} превышает лимит 2 МБ.`, danger: true });
+      } else if (isTextFile(file) || file.name.toLowerCase().endsWith(".pdf")) {
+        // Upload directly to RAG knowledge base instead of inlining content
+        if (!selectedAgent) {
+          await showAlert({ title: "Агент не выбран", message: "Выберите агента перед прикреплением документа — он будет загружен в базу знаний RAG.", danger: true });
           continue;
         }
-        const reader = new FileReader();
-        reader.onload = (evt) => {
-          setAttachments(prev => [...prev, {
-            id: "att_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7),
-            name: file.name,
-            type: "document",
-            content: evt.target.result,
-          }]);
-        };
-        reader.readAsText(file);
+        if (file.size > 10 * 1024 * 1024) {
+          await showAlert({ title: "Файл слишком большой", message: `Файл ${file.name} превышает лимит 10 МБ.`, danger: true });
+          continue;
+        }
+        setIsUploading(true);
+        try {
+          const res = await fetch(`/api/agents/${selectedAgent.id}/rag/upload?filename=${encodeURIComponent(file.name)}`, {
+            method: "POST",
+            body: file,
+          });
+          const data = await res.json();
+          if (res.ok && data.ok) {
+            await showAlert({ title: "Загружено в базу знаний", message: `Файл "${file.name}" добавлен в базу знаний RAG. Теперь задайте ваш вопрос.` });
+            fetchRagFiles(selectedAgent.id);
+          } else {
+            await showAlert({ title: "Ошибка загрузки", message: data.error || "Не удалось загрузить файл в базу знаний.", danger: true });
+          }
+        } catch (err) {
+          await showAlert({ title: "Ошибка", message: err.message, danger: true });
+        } finally {
+          setIsUploading(false);
+        }
       } else {
-        await showAlert({ title: "Формат не поддерживается", message: `Файл ${file.name} должен быть изображением (JPG/PNG/WebP) или текстовым документом.`, danger: true });
+        await showAlert({ title: "Формат не поддерживается", message: `Файл ${file.name} должен быть изображением (JPG/PNG/WebP), текстовым документом или PDF.`, danger: true });
       }
     }
     e.target.value = "";
   };
+
 
   const updateLlmStatus = async () => {
     try {
@@ -576,16 +590,9 @@ export default function AgentsManager({ showAlert, showConfirm, selectedAgentIdF
   const handleSendPlaygroundChat = async () => {
     if ((!chatInput.trim() && attachments.length === 0) || !selectedAgent || isChatSending) return;
 
-    // Document context blocks
-    let documentContext = "";
-    attachments.filter(att => att.type === "document").forEach((att) => {
-      documentContext += `\n[Attached File: ${att.name}]\n${att.content}\n`;
-    });
-
+    // Only image attachments are sent inline — text documents are uploaded to RAG automatically
     const imageAttachments = attachments.filter(att => att.type === "image");
-    const displayCombinedText = documentContext
-      ? [chatInput.trim(), documentContext].filter(Boolean).join("\n\n").trim()
-      : chatInput.trim();
+    const displayCombinedText = chatInput.trim();
 
     let requestUserMessageContent;
     if (imageAttachments.length > 0) {
@@ -610,6 +617,7 @@ export default function AgentsManager({ showAlert, showConfirm, selectedAgentIdF
     setChatInput("");
     setAttachments([]); // Clear attachments
     setIsChatSending(true);
+
 
     const controller = new AbortController();
     abortControllerRef.current = controller;
@@ -1176,6 +1184,7 @@ export default function AgentsManager({ showAlert, showConfirm, selectedAgentIdF
                     type="file" 
                     ref={composerFileInputRef} 
                     multiple 
+                    accept="image/jpeg,image/png,image/webp,.txt,.md,.csv,.js,.jsx,.ts,.tsx,.py,.json,.css,.html,.java,.cpp,.c,.h,.rs,.go,.sh,.bat,.xml,.yaml,.yml,.pdf"
                     onChange={handleComposerFileChange} 
                     style={{ display: "none" }} 
                   />
