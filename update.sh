@@ -36,9 +36,16 @@ echo "[4/4] Rebuild frontend ..."
 cd app/frontend
 npm install --no-bin-links
 mkdir -p node_modules/.bin
-cp node_modules/vite/bin/vite.js node_modules/.bin/vite
+# Create wrapper scripts for binaries (exfat doesn't support symlinks)
+cat > node_modules/.bin/vite << 'WRAPPER'
+#!/usr/bin/env node
+import('../vite/bin/vite.js')
+WRAPPER
 chmod +x node_modules/.bin/vite
-cp node_modules/@tauri-apps/cli/tauri.js node_modules/.bin/tauri
+cat > node_modules/.bin/tauri << 'WRAPPER'
+#!/usr/bin/env node
+require('../@tauri-apps/cli/tauri.js')
+WRAPPER
 chmod +x node_modules/.bin/tauri
 npm run build
 cd ../..
