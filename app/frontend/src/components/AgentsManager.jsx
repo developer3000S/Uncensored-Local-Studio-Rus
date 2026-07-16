@@ -79,9 +79,10 @@ export default function AgentsManager({ showAlert, showConfirm, selectedAgentIdF
     setJobLogs("");
     setChatMessages([]);
     
-    // Fetch files and jobs for this agent
+    // Fetch files, jobs, and chats for this agent
     fetchRagFiles(agent.id);
     fetchAgentJobs(agent.id);
+    fetchAgentChats(agent.id);
   };
 
   // RAG API Actions
@@ -94,6 +95,37 @@ export default function AgentsManager({ showAlert, showConfirm, selectedAgentIdF
       }
     } catch (err) {
       console.error("Failed to fetch RAG files:", err);
+    }
+  };
+
+  const fetchAgentChats = async (agentId) => {
+    try {
+      const res = await fetch(`/api/agents/${agentId}/chats`);
+      const data = await res.json();
+      if (data.ok) {
+        setChatMessages(data.chats || []);
+      }
+    } catch (err) {
+      console.error("Failed to fetch agent chats:", err);
+    }
+  };
+
+  const handleClearChatHistory = async () => {
+    if (!selectedAgent) return;
+    const confirm = await showConfirm({
+      title: "Очистить историю чата",
+      message: "Вы действительно хотите удалить всю историю переписки с этим агентом?",
+      danger: true
+    });
+    if (!confirm) return;
+    try {
+      const res = await fetch(`/api/agents/${selectedAgent.id}/chats`, { method: "DELETE" });
+      if (res.ok) {
+        setChatMessages([]);
+        await showAlert({ title: "Успешно", message: "История переписки очищена." });
+      }
+    } catch (err) {
+      console.error("Failed to clear chat history:", err);
     }
   };
 
@@ -332,22 +364,14 @@ export default function AgentsManager({ showAlert, showConfirm, selectedAgentIdF
     setIsChatSending(true);
 
     try {
-      const payload = {
-        messages: [
-          { role: "system", content: selectedAgent.system_prompt },
-          ...chatMessages,
-          userMsg
-        ]
-      };
-      
-      const chatRes = await fetch("/api/llm/chat", {
+      const chatRes = await fetch(`/api/agents/${selectedAgent.id}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
+        body: JSON.stringify({ message: userMsg.content })
       });
       const data = await chatRes.json();
-      if (chatRes.ok && data.choices?.[0]?.message?.content) {
-        setChatMessages(prev => [...prev, { role: "assistant", content: data.choices[0].message.content }]);
+      if (chatRes.ok && data.reply) {
+        setChatMessages(prev => [...prev, { role: "assistant", content: data.reply }]);
       } else {
         setChatMessages(prev => [...prev, { role: "assistant", content: `Ошибка: ${data.error || "Не удалось получить ответ."}` }]);
       }
@@ -706,6 +730,16 @@ export default function AgentsManager({ showAlert, showConfirm, selectedAgentIdF
           {activeSubTab === "chat" && (
             <div style={{ display: "flex", flexDirection: "column", height: "550px", border: "1px solid var(--border-color)", borderRadius: "12px", overflow: "hidden", background: "var(--md-sys-color-surface-container-lowest)" }}>
               
+              {/* Chat Header with Clear Button */}
+              <div style={{ padding: "12px 20px", borderBottom: "1px solid var(--border-color)", background: "var(--md-sys-color-surface-container-low)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: "0.85rem", fontWeight: "600", opacity: 0.8 }}>Тестирование и история Агента</span>
+                <button
+                  onClick={handleClearChatHistory}
+                  style={{ background: "transparent", border: "none", color: "var(--md-sys-color-error)", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px", fontSize: "0.82rem", padding: "4px 8px", borderRadius: "4px" }}
+                >
+                  <Trash2 size={14} /> Очистить историю
+                </button>
+              </div>
               {/* Chat Message List */}
               <div style={{ flex: 1, overflowY: "auto", padding: "20px", display: "flex", flexDirection: "column", gap: "12px" }}>
                 {chatMessages.length === 0 ? (

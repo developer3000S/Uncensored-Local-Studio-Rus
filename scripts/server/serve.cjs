@@ -5912,6 +5912,13 @@ function initDb() {
       started_at TEXT,
       completed_at TEXT
     );
+    CREATE TABLE IF NOT EXISTS agent_chats (
+      id TEXT PRIMARY KEY,
+      agent_id TEXT NOT NULL,
+      role TEXT NOT NULL,
+      content TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
   `;
   dbRun(sql);
 }
@@ -6088,8 +6095,17 @@ async function executeAgentTask(job) {
     ? `Контекст из базы знаний:\n---\n${retrievedContext}\n---\n\nСистемный промпт:\n${agent.system_prompt}`
     : agent.system_prompt;
 
+  let chatHistory = [];
+  try {
+    const rawHistory = dbQuery("SELECT role, content FROM agent_chats WHERE agent_id = ? ORDER BY created_at DESC LIMIT 20;", [agent.id]);
+    chatHistory = rawHistory.reverse();
+  } catch (err) {
+    console.error("  [agent-chat] Failed to fetch chat history:", err);
+  }
+
   const messages = [
     { role: "system", content: systemPrompt },
+    ...chatHistory,
     { role: "user", content: job.task_prompt }
   ];
 
@@ -6099,6 +6115,8 @@ async function executeAgentTask(job) {
   logStream.write(`=== AGENT JOB START: ${new Date().toISOString()} ===\n`);
   logStream.write(`Agent: ${agent.name}\n`);
   logStream.write(`Task: ${job.task_prompt}\n\n`);
+
+  let fullResponse = "";
 
   return new Promise((resolve, reject) => {
     const postData = JSON.stringify({
@@ -6144,6 +6162,7 @@ async function executeAgentTask(job) {
               const token = parsed.choices?.[0]?.delta?.content || "";
               if (token) {
                 logStream.write(token);
+                fullResponse += token;
               }
             } catch (_) {}
           }
@@ -6153,6 +6172,20 @@ async function executeAgentTask(job) {
       res.on("end", () => {
         logStream.write(`\n\n=== AGENT JOB COMPLETED: ${new Date().toISOString()} ===\n`);
         logStream.end();
+
+        try {
+          dbRun(
+            "INSERT INTO agent_chats (id, agent_id, role, content, created_at) VALUES (?, ?, ?, ?, ?);",
+            [crypto.randomUUID(), agent.id, "user", job.task_prompt, new Date().toISOString()]
+          );
+          dbRun(
+            "INSERT INTO agent_chats (id, agent_id, role, content, created_at) VALUES (?, ?, ?, ?, ?);",
+            [crypto.randomUUID(), agent.id, "assistant", fullResponse, new Date().toISOString()]
+          );
+        } catch (dbErr) {
+          console.error("  [agent-chat] Failed to save background job completion to chats:", dbErr);
+        }
+
         resolve();
       });
     });
@@ -7616,6 +7649,8 @@ async function getLlmfitRecommendations(useCase = "chat", limit = 10) {
       }
       dbRun("DELETE FROM agents WHERE id = ?;", [id]);
       dbRun("DELETE FROM rag_files WHERE agent_id = ?;", [id]);
+      dbRun("DELETE FROM agent_chats WHERE agent_id = ?;", [id]);
+      dbRun("DELETE FROM agent_jobs WHERE agent_id = ?;", [id]);
       return json(res, 200, { ok: true });
     } catch (err) {
       return json(res, 500, { ok: false, error: err.message });
@@ -7741,6 +7776,98 @@ async function getLlmfitRecommendations(useCase = "chat", limit = 10) {
       const jobs = dbQuery("SELECT * FROM agent_jobs WHERE agent_id = ? ORDER BY created_at DESC;", [id]);
       return json(res, 200, { ok: true, jobs });
     } catch (err) {
+      return json(res, 500, { ok: false, error: err.message });
+    }
+  }
+
+  if (req.url.startsWith("/api/agents/") && req.url.endsWith("/chats") && req.method === "GET") {
+    const parts = req.url.split("/");
+    const id = parts[3];
+    try {
+      const chats = dbQuery("SELECT role, content, created_at FROM agent_chats WHERE agent_id = ? ORDER BY created_at ASC;", [id]);
+      return json(res, 200, { ok: true, chats });
+    } catch (err) {
+      return json(res, 500, { ok: false, error: err.message });
+    }
+  }
+
+  if (req.url.startsWith("/api/agents/") && req.url.endsWith("/chats") && req.method === "DELETE") {
+    const parts = req.url.split("/");
+    const id = parts[3];
+    try {
+      dbRun("DELETE FROM agent_chats WHERE agent_id = ?;", [id]);
+      return json(res, 200, { ok: true });
+    } catch (err) {
+      return json(res, 500, { ok: false, error: err.message });
+    }
+  }
+
+  if (req.url.startsWith("/api/agents/") && req.url.endsWith("/chat") && req.method === "POST") {
+    const parts = req.url.split("/");
+    const id = parts[3];
+    try {
+      const body = await readJsonBody(req, res);
+      if (!body) return;
+      const { message } = body;
+      if (!message) {
+        return json(res, 400, { ok: false, error: "message is required" });
+      }
+      const agent = dbQuery("SELECT * FROM agents WHERE id = ?;", [id])[0];
+      if (!agent) {
+        return json(res, 404, { ok: false, error: "Agent not found" });
+      }
+      if (!llmReady || !llmProc) {
+        return json(res, 400, { ok: false, error: "Текстовая модель не запущена. Пожалуйста, запустите модель в Менеджере моделей перед общением с агентом." });
+      }
+
+      // RAG context search
+      let retrievedContext = "";
+      try {
+        retrievedContext = await performRagSearch(message, agent.id, agent.rag_scope);
+      } catch (err) {
+        console.error("  [agent-rag] Search failed:", err);
+      }
+
+      const systemPrompt = retrievedContext 
+        ? `Контекст из базы знаний:\n---\n${retrievedContext}\n---\n\nСистемный промпт:\n${agent.system_prompt}`
+        : agent.system_prompt;
+
+      // Fetch history
+      let chatHistory = [];
+      try {
+        const rawHistory = dbQuery("SELECT role, content FROM agent_chats WHERE agent_id = ? ORDER BY created_at DESC LIMIT 20;", [id]);
+        chatHistory = rawHistory.reverse();
+      } catch (err) {
+        console.error("  [agent-chat] Failed to fetch chat history:", err);
+      }
+
+      const messages = [
+        { role: "system", content: systemPrompt },
+        ...chatHistory,
+        { role: "user", content: message }
+      ];
+
+      // Call local LLM
+      const result = await requestJson(`http://127.0.0.1:${PORT_LLM}/v1/chat/completions`, {
+        messages: messages,
+        temperature: 0.7
+      }, 300000);
+
+      const assistantReply = result.choices?.[0]?.message?.content || "";
+
+      // Save to database
+      dbRun(
+        "INSERT INTO agent_chats (id, agent_id, role, content, created_at) VALUES (?, ?, ?, ?, ?);",
+        [crypto.randomUUID(), id, "user", message, new Date().toISOString()]
+      );
+      dbRun(
+        "INSERT INTO agent_chats (id, agent_id, role, content, created_at) VALUES (?, ?, ?, ?, ?);",
+        [crypto.randomUUID(), id, "assistant", assistantReply, new Date().toISOString()]
+      );
+
+      return json(res, 200, { ok: true, reply: assistantReply });
+    } catch (err) {
+      console.error("  [agent-chat] Chat processing failed:", err);
       return json(res, 500, { ok: false, error: err.message });
     }
   }

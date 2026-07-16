@@ -188,6 +188,7 @@ AI Studio features a built-in engine for local AI agents and a SQLite-powered RA
 ### Key Capabilities:
 * **Global Sidebar Navigation**: The list of your custom agents is displayed in the main sidebar dropdown. You can switch between them instantly or create a new agent via the `+ Create agent...` button.
 * **Direct Agent Chat**: Clicking an agent in the sidebar immediately opens the chat workspace configured specifically for that helper.
+* **Persistent Memory & Learning**: All chats with your agent are saved to the database (`agent_chats`). The agent has continuous access to its message history (the last 20 messages are passed as a sliding context window) both in the playground chat and during background task execution. You can clear the history at any time with the "Clear history" button.
 * **Custom Configuration**: Assign a name, description, and custom system prompt to define your agent's personality and behavior guidelines.
 * **Local Knowledge Base (RAG)**: Upload documents in `.pdf`, `.txt`, and `.md` formats. The engine chunks text, generates vector embeddings, and stores them in the local `studio.db` database.
 * **Personal or Shared RAG Access**: Limit loaded documents to a single agent ("Personal RAG") or make them globally accessible ("Shared RAG").
