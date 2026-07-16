@@ -122,6 +122,7 @@ export default function AgentsManager({ showAlert, showConfirm, selectedAgentIdF
   const [chatMessages, setChatMessages] = useState([]);
   const [chatInput, setChatInput] = useState("");
   const [isChatSending, setIsChatSending] = useState(false);
+  const [isRagUploading, setIsRagUploading] = useState(false);
 
   const [status, setStatus] = useState({ ready: false, running: false, settings: {} });
   const [attachments, setAttachments] = useState([]);
@@ -176,6 +177,7 @@ export default function AgentsManager({ showAlert, showConfirm, selectedAgentIdF
   const handleComposerFileChange = async (e) => {
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
+    e.target.value = "";
 
     for (const file of files) {
       if (isImage(file)) {
@@ -191,16 +193,15 @@ export default function AgentsManager({ showAlert, showConfirm, selectedAgentIdF
           await showAlert({ title: "Ошибка", message: `Не удалось обработать изображение ${file.name}: ${err.message}`, danger: true });
         }
       } else if (isTextFile(file) || file.name.toLowerCase().endsWith(".pdf")) {
-        // Upload directly to RAG knowledge base instead of inlining content
         if (!selectedAgent) {
-          await showAlert({ title: "Агент не выбран", message: "Выберите агента перед прикреплением документа — он будет загружен в базу знаний RAG.", danger: true });
+          await showAlert({ title: "Агент не выбран", message: "Выберите агента перед прикреплением документа.", danger: true });
           continue;
         }
         if (file.size > 10 * 1024 * 1024) {
           await showAlert({ title: "Файл слишком большой", message: `Файл ${file.name} превышает лимит 10 МБ.`, danger: true });
           continue;
         }
-        setIsUploading(true);
+        setIsRagUploading(true);
         try {
           const res = await fetch(`/api/agents/${selectedAgent.id}/rag/upload?filename=${encodeURIComponent(file.name)}`, {
             method: "POST",
@@ -208,7 +209,11 @@ export default function AgentsManager({ showAlert, showConfirm, selectedAgentIdF
           });
           const data = await res.json();
           if (res.ok && data.ok) {
-            await showAlert({ title: "Загружено в базу знаний", message: `Файл "${file.name}" добавлен в базу знаний RAG. Теперь задайте ваш вопрос.` });
+            // Non-blocking: insert a system note into the chat so user knows the file is indexed
+            setChatMessages(prev => [...prev, {
+              role: "system-note",
+              content: `📄 Файл «${file.name}» добавлен в базу знаний RAG. Задайте ваш вопрос.`,
+            }]);
             fetchRagFiles(selectedAgent.id);
           } else {
             await showAlert({ title: "Ошибка загрузки", message: data.error || "Не удалось загрузить файл в базу знаний.", danger: true });
@@ -216,14 +221,14 @@ export default function AgentsManager({ showAlert, showConfirm, selectedAgentIdF
         } catch (err) {
           await showAlert({ title: "Ошибка", message: err.message, danger: true });
         } finally {
-          setIsUploading(false);
+          setIsRagUploading(false);
         }
       } else {
         await showAlert({ title: "Формат не поддерживается", message: `Файл ${file.name} должен быть изображением (JPG/PNG/WebP), текстовым документом или PDF.`, danger: true });
       }
     }
-    e.target.value = "";
   };
+
 
 
   const updateLlmStatus = async () => {
@@ -1086,6 +1091,16 @@ export default function AgentsManager({ showAlert, showConfirm, selectedAgentIdF
                   </div>
                 ) : (
                   chatMessages.map((msg, idx) => {
+                    // System notes (e.g. RAG upload confirmations) — rendered as a subtle centered label
+                    if (msg.role === "system-note") {
+                      return (
+                        <div key={idx} style={{ textAlign: "center", padding: "6px 16px", margin: "4px 0" }}>
+                          <span style={{ fontSize: "0.78rem", color: "var(--md-sys-color-outline)", background: "var(--md-sys-color-surface-container)", borderRadius: "12px", padding: "3px 12px", display: "inline-block" }}>
+                            {msg.content}
+                          </span>
+                        </div>
+                      );
+                    }
                     const isUser = msg.role === "user";
                     const processed = processMessageContent(
                       msg.content || "",
@@ -1249,11 +1264,12 @@ export default function AgentsManager({ showAlert, showConfirm, selectedAgentIdF
                     <div className="chat-composer-toolbar-left" style={{ display: "flex", gap: "8px", alignItems: "center" }}>
                       <button 
                         className="chat-composer-tool-btn"
-                        onClick={() => composerFileInputRef.current?.click()}
-                        title="Прикрепить изображение или текстовый файл"
-                        style={{ background: "transparent", border: "none", cursor: "pointer", display: "flex", padding: "6px", borderRadius: "4px", color: "var(--md-sys-color-outline)" }}
+                        onClick={() => !isRagUploading && composerFileInputRef.current?.click()}
+                        title={isRagUploading ? "Загрузка файла в RAG..." : "Прикрепить изображение или документ (авто-загрузка в RAG)"}
+                        disabled={isRagUploading}
+                        style={{ background: "transparent", border: "none", cursor: isRagUploading ? "wait" : "pointer", display: "flex", padding: "6px", borderRadius: "4px", color: isRagUploading ? "var(--md-sys-color-primary)" : "var(--md-sys-color-outline)", opacity: isRagUploading ? 0.7 : 1 }}
                       >
-                        <Paperclip size={16} />
+                        {isRagUploading ? <Loader2 size={16} style={{ animation: "spin 1s linear infinite" }} /> : <Paperclip size={16} />}
                       </button>
                       
                       <button 
