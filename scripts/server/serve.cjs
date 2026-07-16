@@ -4327,6 +4327,7 @@ async function startLlmWithBackend(settings = {}, backend) {
     "--model", modelPath,
     "--host", "127.0.0.1",
     "--port", String(PORT_LLM),
+    "--embedding",
     "-lv", "1",
     "--ctx-size", String(llmSettings.contextSize),
     "--threads", String(llmSettings.threads),
@@ -5811,6 +5812,402 @@ function streamModelUpload(req, filename, targetDir = MODELS, mode = "image") {
   });
 }
 
+// ==========================================
+// SQLite Database Helpers & Schema Init
+// ==========================================
+const sqliteDbPath = path.join(ROOT, "app", "config", "studio.db");
+const crypto = require("crypto");
+
+function dbRun(sql, params = []) {
+  fs.mkdirSync(path.dirname(sqliteDbPath), { recursive: true });
+
+  const parts = sql.split("?");
+  let formattedSql = parts[0];
+  for (let i = 0; i < params.length; i++) {
+    const param = params[i];
+    let escaped = "";
+    if (param === null || param === undefined) {
+      escaped = "NULL";
+    } else if (typeof param === "number") {
+      escaped = String(param);
+    } else {
+      escaped = "'" + String(param).replace(/'/g, "''") + "'";
+    }
+    formattedSql += escaped + (parts[i + 1] || "");
+  }
+
+  const tmpSqlFile = path.join(os.tmpdir(), `query_${Date.now()}_${Math.random().toString(36).slice(2)}.sql`);
+  fs.writeFileSync(tmpSqlFile, formattedSql, "utf8");
+  try {
+    execSync(`sqlite3 "${sqliteDbPath}" < "${tmpSqlFile}"`);
+  } finally {
+    try { fs.unlinkSync(tmpSqlFile); } catch (_) {}
+  }
+}
+
+function dbQuery(sql, params = []) {
+  fs.mkdirSync(path.dirname(sqliteDbPath), { recursive: true });
+
+  const parts = sql.split("?");
+  let formattedSql = parts[0];
+  for (let i = 0; i < params.length; i++) {
+    const param = params[i];
+    let escaped = "";
+    if (param === null || param === undefined) {
+      escaped = "NULL";
+    } else if (typeof param === "number") {
+      escaped = String(param);
+    } else {
+      escaped = "'" + String(param).replace(/'/g, "''") + "'";
+    }
+    formattedSql += escaped + (parts[i + 1] || "");
+  }
+
+  const tmpSqlFile = path.join(os.tmpdir(), `query_${Date.now()}_${Math.random().toString(36).slice(2)}.sql`);
+  fs.writeFileSync(tmpSqlFile, formattedSql, "utf8");
+  try {
+    const output = execSync(`sqlite3 -json "${sqliteDbPath}" < "${tmpSqlFile}"`, { encoding: "utf8" });
+    return JSON.parse(output.trim() || "[]");
+  } catch (err) {
+    if (err.message.includes("Unexpected end of JSON input")) {
+      return [];
+    }
+    console.error("Database query failed:", err.message, "SQL:", formattedSql);
+    throw err;
+  } finally {
+    try { fs.unlinkSync(tmpSqlFile); } catch (_) {}
+  }
+}
+
+function initDb() {
+  const sql = `
+    CREATE TABLE IF NOT EXISTS agents (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      description TEXT,
+      system_prompt TEXT NOT NULL,
+      rag_scope TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS rag_files (
+      id TEXT PRIMARY KEY,
+      agent_id TEXT,
+      filename TEXT NOT NULL,
+      file_path TEXT NOT NULL,
+      uploaded_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS rag_chunks (
+      id TEXT PRIMARY KEY,
+      file_id TEXT NOT NULL,
+      content TEXT NOT NULL,
+      embedding TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS agent_jobs (
+      id TEXT PRIMARY KEY,
+      agent_id TEXT NOT NULL,
+      task_prompt TEXT NOT NULL,
+      status TEXT NOT NULL,
+      log_path TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      started_at TEXT,
+      completed_at TEXT
+    );
+  `;
+  dbRun(sql);
+}
+
+// Initialize tables on startup
+initDb();
+
+// ==========================================
+// RAG Upload, Chanking, Embeddings, & Search
+// ==========================================
+const pdfParse = require("pdf-parse");
+
+function streamRagUpload(req, filename, targetDir) {
+  return new Promise((resolve, reject) => {
+    const safeFilename = path.basename(filename || "");
+    const lowerName = safeFilename.toLowerCase();
+    const valid = lowerName.endsWith(".pdf") || lowerName.endsWith(".txt") || lowerName.endsWith(".md");
+    if (!safeFilename || !valid) {
+      reject(new Error("Filename must end with .pdf, .txt, or .md"));
+      return;
+    }
+    fs.mkdirSync(targetDir, { recursive: true });
+    const destPath = path.join(targetDir, safeFilename);
+    const out = fs.createWriteStream(destPath);
+    req.pipe(out);
+    req.on("error", err => {
+      out.destroy();
+      try { fs.unlinkSync(destPath); } catch (_) {}
+      reject(err);
+    });
+    out.on("error", err => {
+      out.destroy();
+      try { fs.unlinkSync(destPath); } catch (_) {}
+      reject(err);
+    });
+    out.on("finish", () => {
+      resolve({ filename: safeFilename, path: destPath });
+    });
+  });
+}
+
+async function extractText(filePath, filename) {
+  const ext = path.extname(filename).toLowerCase();
+  if (ext === ".txt" || ext === ".md") {
+    return fs.readFileSync(filePath, "utf8");
+  } else if (ext === ".pdf") {
+    const dataBuffer = fs.readFileSync(filePath);
+    const data = await pdfParse(dataBuffer);
+    return data.text;
+  } else {
+    throw new Error("Unsupported file format: " + ext);
+  }
+}
+
+function chunkText(text, size = 800, overlap = 100) {
+  const chunks = [];
+  let index = 0;
+  while (index < text.length) {
+    let chunk = text.slice(index, index + size);
+    chunks.push(chunk);
+    index += size - overlap;
+  }
+  return chunks;
+}
+
+function cosineSimilarity(vecA, vecB) {
+  let dotProduct = 0.0;
+  let normA = 0.0;
+  let normB = 0.0;
+  for (let i = 0; i < vecA.length; i++) {
+    dotProduct += vecA[i] * vecB[i];
+    normA += vecA[i] * vecA[i];
+    normB += vecB[i] * vecB[i];
+  }
+  if (normA === 0 || normB === 0) return 0;
+  return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+}
+
+function getEmbedding(text) {
+  return new Promise((resolve, reject) => {
+    const postData = JSON.stringify({ content: text });
+    const req = http.request({
+      hostname: "127.0.0.1",
+      port: PORT_LLM,
+      path: "/embedding",
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Content-Length": Buffer.byteLength(postData)
+      },
+      agent: llmHttpAgent
+    }, (res) => {
+      let body = "";
+      res.on("data", (chunk) => body += chunk);
+      res.on("end", () => {
+        if (res.statusCode !== 200) {
+          return reject(new Error(`Embedding server returned status ${res.statusCode}: ${body}`));
+        }
+        try {
+          const parsed = JSON.parse(body);
+          if (parsed.embedding) {
+            resolve(parsed.embedding);
+          } else {
+            reject(new Error("No embedding field in response: " + body));
+          }
+        } catch (err) {
+          reject(err);
+        }
+      });
+    });
+    req.on("error", (err) => reject(err));
+    req.write(postData);
+    req.end();
+  });
+}
+
+async function performRagSearch(queryText, agentId, ragScope) {
+  let queryEmbedding;
+  try {
+    queryEmbedding = await getEmbedding(queryText);
+  } catch (err) {
+    console.error("Failed to generate embedding for query:", err.message);
+    return "";
+  }
+
+  let files;
+  if (ragScope === "shared") {
+    files = dbQuery("SELECT id FROM rag_files WHERE agent_id IS NULL;");
+  } else {
+    files = dbQuery("SELECT id FROM rag_files WHERE agent_id = ?;", [agentId]);
+  }
+
+  if (files.length === 0) return "";
+
+  const fileIds = files.map(f => `'${f.id}'`).join(",");
+  const chunks = dbQuery(`SELECT content, embedding FROM rag_chunks WHERE file_id IN (${fileIds});`);
+  if (chunks.length === 0) return "";
+
+  const scoredChunks = [];
+  for (const chunk of chunks) {
+    try {
+      const chunkEmbedding = JSON.parse(chunk.embedding);
+      const score = cosineSimilarity(queryEmbedding, chunkEmbedding);
+      scoredChunks.push({ content: chunk.content, score });
+    } catch (_) {}
+  }
+
+  scoredChunks.sort((a, b) => b.score - a.score);
+  const topChunks = scoredChunks.slice(0, 5).filter(c => c.score > 0.3);
+  return topChunks.map(c => c.content).join("\n\n---\n\n");
+}
+
+// ==========================================
+// Background Agent Jobs execution & FIFO Queue
+// ==========================================
+async function executeAgentTask(job) {
+  const agent = dbQuery("SELECT * FROM agents WHERE id = ?;", [job.agent_id])[0];
+  if (!agent) {
+    throw new Error("Agent not found: " + job.agent_id);
+  }
+
+  if (!llmReady || !llmProc) {
+    throw new Error("Local LLM server is not running. Please start a text model in the Model Manager first.");
+  }
+
+  let retrievedContext = "";
+  try {
+    retrievedContext = await performRagSearch(job.task_prompt, agent.id, agent.rag_scope);
+  } catch (err) {
+    console.error("  [agent-rag] Search failed:", err);
+  }
+
+  const systemPrompt = retrievedContext 
+    ? `Контекст из базы знаний:\n---\n${retrievedContext}\n---\n\nСистемный промпт:\n${agent.system_prompt}`
+    : agent.system_prompt;
+
+  const messages = [
+    { role: "system", content: systemPrompt },
+    { role: "user", content: job.task_prompt }
+  ];
+
+  const logDir = path.dirname(job.log_path);
+  fs.mkdirSync(logDir, { recursive: true });
+  const logStream = fs.createWriteStream(job.log_path, { flags: "w" });
+  logStream.write(`=== AGENT JOB START: ${new Date().toISOString()} ===\n`);
+  logStream.write(`Agent: ${agent.name}\n`);
+  logStream.write(`Task: ${job.task_prompt}\n\n`);
+
+  return new Promise((resolve, reject) => {
+    const postData = JSON.stringify({
+      messages: messages,
+      stream: true,
+      temperature: 0.7
+    });
+
+    const req = http.request({
+      hostname: "127.0.0.1",
+      port: PORT_LLM,
+      path: "/v1/chat/completions",
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Content-Length": Buffer.byteLength(postData)
+      },
+      agent: llmHttpAgent
+    }, (res) => {
+      if (res.statusCode !== 200) {
+        let errBody = "";
+        res.on("data", (c) => errBody += c);
+        res.on("end", () => {
+          logStream.write(`\nError: Server returned status ${res.statusCode}: ${errBody}\n`);
+          logStream.end();
+          reject(new Error(`Chat endpoint returned status ${res.statusCode}`));
+        });
+        return;
+      }
+
+      let buffer = "";
+      res.on("data", (chunk) => {
+        buffer += chunk.toString();
+        const lines = buffer.split("\n");
+        buffer = lines.pop();
+
+        for (const line of lines) {
+          const cleaned = line.trim();
+          if (!cleaned || cleaned === "data: [DONE]") continue;
+          if (cleaned.startsWith("data:")) {
+            try {
+              const parsed = JSON.parse(cleaned.slice(5).trim());
+              const token = parsed.choices?.[0]?.delta?.content || "";
+              if (token) {
+                logStream.write(token);
+              }
+            } catch (_) {}
+          }
+        }
+      });
+
+      res.on("end", () => {
+        logStream.write(`\n\n=== AGENT JOB COMPLETED: ${new Date().toISOString()} ===\n`);
+        logStream.end();
+        resolve();
+      });
+    });
+
+    req.on("error", (err) => {
+      logStream.write(`\nError: ${err.message}\n`);
+      logStream.end();
+      reject(err);
+    });
+
+    req.write(postData);
+    req.end();
+  });
+}
+
+class AgentJobQueue {
+  constructor() {
+    this.activeJob = null;
+  }
+  
+  async enqueue(jobId) {
+    dbRun("UPDATE agent_jobs SET status = 'pending' WHERE id = ?;", [jobId]);
+    this.processNext();
+  }
+  
+  async processNext() {
+    if (this.activeJob) return;
+    
+    const pendingJobs = dbQuery("SELECT * FROM agent_jobs WHERE status = 'pending' ORDER BY created_at ASC LIMIT 1;");
+    if (pendingJobs.length === 0) return;
+    
+    const nextJob = pendingJobs[0];
+    this.activeJob = nextJob;
+    this.runJob(nextJob);
+  }
+  
+  async runJob(job) {
+    dbRun("UPDATE agent_jobs SET status = 'running', started_at = ? WHERE id = ?;", [new Date().toISOString(), job.id]);
+    try {
+      await executeAgentTask(job);
+      dbRun("UPDATE agent_jobs SET status = 'completed', completed_at = ? WHERE id = ?;", [new Date().toISOString(), job.id]);
+    } catch (err) {
+      dbRun("UPDATE agent_jobs SET status = 'failed', completed_at = ? WHERE id = ?;", [new Date().toISOString(), job.id]);
+      try {
+        fs.appendFileSync(job.log_path, `\nExecution failed: ${err.message}\n`);
+      } catch (_) {}
+    } finally {
+      this.activeJob = null;
+      this.processNext();
+    }
+  }
+}
+
+const agentJobQueue = new AgentJobQueue();
+
 function json(res, code, obj) {
   const body = JSON.stringify(obj);
   res.writeHead(code, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
@@ -7160,6 +7557,249 @@ async function getLlmfitRecommendations(useCase = "chat", limit = 10) {
     } catch (err) {
       console.error(`  [api] Failed to delete model ${safeFilename}:`, err);
       return json(res, 500, { error: err.message });
+    }
+  }
+
+  // ── Agents API ────────────────────────────────────────────────────────────
+  if (req.url === "/api/agents" && req.method === "GET") {
+    try {
+      const agents = dbQuery("SELECT * FROM agents ORDER BY created_at DESC;");
+      return json(res, 200, { ok: true, agents });
+    } catch (err) {
+      return json(res, 500, { ok: false, error: err.message });
+    }
+  }
+
+  if (req.url === "/api/agents" && req.method === "POST") {
+    try {
+      const body = await readJsonBody(req, res);
+      if (!body) return;
+      const { name, description, system_prompt, rag_scope } = body;
+      if (!name || !system_prompt) {
+        return json(res, 400, { ok: false, error: "name and system_prompt are required" });
+      }
+      const agentId = crypto.randomUUID();
+      dbRun(
+        "INSERT INTO agents (id, name, description, system_prompt, rag_scope, created_at) VALUES (?, ?, ?, ?, ?, ?);",
+        [agentId, name, description || "", system_prompt, rag_scope || "personal", new Date().toISOString()]
+      );
+      return json(res, 200, { ok: true, id: agentId });
+    } catch (err) {
+      return json(res, 500, { ok: false, error: err.message });
+    }
+  }
+
+  if (req.url.startsWith("/api/agents/") && req.method === "PUT") {
+    const parts = req.url.split("/");
+    const id = parts[3];
+    try {
+      const body = await readJsonBody(req, res);
+      if (!body) return;
+      const { name, description, system_prompt, rag_scope } = body;
+      dbRun(
+        "UPDATE agents SET name = ?, description = ?, system_prompt = ?, rag_scope = ? WHERE id = ?;",
+        [name, description || "", system_prompt, rag_scope || "personal", id]
+      );
+      return json(res, 200, { ok: true });
+    } catch (err) {
+      return json(res, 500, { ok: false, error: err.message });
+    }
+  }
+
+  if (req.url.startsWith("/api/agents/") && req.method === "DELETE") {
+    const parts = req.url.split("/");
+    const id = parts[3];
+    try {
+      const files = dbQuery("SELECT file_path FROM rag_files WHERE agent_id = ?;", [id]);
+      for (const file of files) {
+        try { fs.unlinkSync(file.file_path); } catch (_) {}
+      }
+      dbRun("DELETE FROM agents WHERE id = ?;", [id]);
+      dbRun("DELETE FROM rag_files WHERE agent_id = ?;", [id]);
+      return json(res, 200, { ok: true });
+    } catch (err) {
+      return json(res, 500, { ok: false, error: err.message });
+    }
+  }
+
+  if (req.url.startsWith("/api/agents/") && req.url.includes("/rag/upload") && req.method === "POST") {
+    const parts = req.url.split("/");
+    const id = parts[3];
+    try {
+      const parsed = new URL(req.url, `http://${req.headers.host || "localhost"}`);
+      const filename = parsed.searchParams.get("filename");
+      const agent = dbQuery("SELECT * FROM agents WHERE id = ?;", [id])[0];
+      if (!agent) {
+        return json(res, 404, { ok: false, error: "Agent not found" });
+      }
+
+      if (!llmReady || !llmProc) {
+        return json(res, 400, { ok: false, error: "Текстовая модель не запущена. Пожалуйста, запустите модель в Менеджере моделей для создания эмбеддингов RAG." });
+      }
+
+      const targetDir = agent.rag_scope === "shared"
+        ? path.join(ROOT, "app", "rag", "shared")
+        : path.join(ROOT, "app", "rag", "personal", id);
+
+      const uploadResult = await streamRagUpload(req, filename, targetDir);
+      const extractedText = await extractText(uploadResult.path, uploadResult.filename);
+
+      const fileId = crypto.randomUUID();
+      dbRun(
+        "INSERT INTO rag_files (id, agent_id, filename, file_path, uploaded_at) VALUES (?, ?, ?, ?, ?);",
+        [fileId, agent.rag_scope === "shared" ? null : id, uploadResult.filename, uploadResult.path, new Date().toISOString()]
+      );
+
+      const chunks = chunkText(extractedText);
+      for (const chunk of chunks) {
+        if (!chunk.trim()) continue;
+        const embedding = await getEmbedding(chunk);
+        const chunkId = crypto.randomUUID();
+        dbRun(
+          "INSERT INTO rag_chunks (id, file_id, content, embedding) VALUES (?, ?, ?, ?);",
+          [chunkId, fileId, chunk, JSON.stringify(embedding)]
+        );
+      }
+
+      return json(res, 200, { ok: true, fileId, filename: uploadResult.filename });
+    } catch (err) {
+      console.error("  [api] RAG upload/processing failed:", err);
+      return json(res, 500, { ok: false, error: err.message });
+    }
+  }
+
+  if (req.url.startsWith("/api/agents/") && req.url.endsWith("/rag/files") && req.method === "GET") {
+    const parts = req.url.split("/");
+    const id = parts[3];
+    try {
+      const agent = dbQuery("SELECT * FROM agents WHERE id = ?;", [id])[0];
+      if (!agent) {
+        return json(res, 404, { ok: false, error: "Agent not found" });
+      }
+      let files;
+      if (agent.rag_scope === "shared") {
+        files = dbQuery("SELECT * FROM rag_files WHERE agent_id IS NULL;");
+      } else {
+        files = dbQuery("SELECT * FROM rag_files WHERE agent_id = ?;", [id]);
+      }
+      return json(res, 200, { ok: true, files });
+    } catch (err) {
+      return json(res, 500, { ok: false, error: err.message });
+    }
+  }
+
+  if (req.url.startsWith("/api/agents/") && req.url.includes("/rag/files/") && req.method === "DELETE") {
+    const parts = req.url.split("/");
+    const fileId = parts[6];
+    try {
+      const file = dbQuery("SELECT * FROM rag_files WHERE id = ?;", [fileId])[0];
+      if (!file) {
+        return json(res, 404, { ok: false, error: "File not found" });
+      }
+      try { fs.unlinkSync(file.file_path); } catch (_) {}
+      dbRun("DELETE FROM rag_files WHERE id = ?;", [fileId]);
+      dbRun("DELETE FROM rag_chunks WHERE file_id = ?;", [fileId]);
+      return json(res, 200, { ok: true });
+    } catch (err) {
+      return json(res, 500, { ok: false, error: err.message });
+    }
+  }
+
+  if (req.url.startsWith("/api/agents/") && req.url.endsWith("/run-background") && req.method === "POST") {
+    const parts = req.url.split("/");
+    const id = parts[3];
+    try {
+      const body = await readJsonBody(req, res);
+      if (!body) return;
+      const { task_prompt } = body;
+      if (!task_prompt) {
+        return json(res, 400, { ok: false, error: "task_prompt is required" });
+      }
+      if (!llmReady || !llmProc) {
+        return json(res, 400, { ok: false, error: "Текстовая модель не запущена. Пожалуйста, запустите модель в Менеджере моделей перед запуском задач." });
+      }
+      const jobId = crypto.randomUUID();
+      const logPath = path.join(ROOT, "app", "outputs", "agents", "logs", `${jobId}.log`);
+      
+      dbRun(
+        "INSERT INTO agent_jobs (id, agent_id, task_prompt, status, log_path, created_at) VALUES (?, ?, ?, ?, ?, ?);",
+        [jobId, id, task_prompt, "pending", logPath, new Date().toISOString()]
+      );
+
+      agentJobQueue.enqueue(jobId);
+
+      return json(res, 200, { ok: true, jobId });
+    } catch (err) {
+      return json(res, 500, { ok: false, error: err.message });
+    }
+  }
+
+  if (req.url.startsWith("/api/agents/") && req.url.endsWith("/jobs") && req.method === "GET") {
+    const parts = req.url.split("/");
+    const id = parts[3];
+    try {
+      const jobs = dbQuery("SELECT * FROM agent_jobs WHERE agent_id = ? ORDER BY created_at DESC;", [id]);
+      return json(res, 200, { ok: true, jobs });
+    } catch (err) {
+      return json(res, 500, { ok: false, error: err.message });
+    }
+  }
+
+  if (req.url.startsWith("/api/agents/jobs/") && req.url.endsWith("/status") && req.method === "GET") {
+    const parts = req.url.split("/");
+    const jobId = parts[4];
+    try {
+      const job = dbQuery("SELECT * FROM agent_jobs WHERE id = ?;", [jobId])[0];
+      if (!job) {
+        return json(res, 404, { ok: false, error: "Job not found" });
+      }
+      return json(res, 200, { ok: true, job });
+    } catch (err) {
+      return json(res, 500, { ok: false, error: err.message });
+    }
+  }
+
+  if (req.url.startsWith("/api/agents/jobs/") && req.url.endsWith("/logs") && req.method === "GET") {
+    const parts = req.url.split("/");
+    const jobId = parts[4];
+    try {
+      const job = dbQuery("SELECT * FROM agent_jobs WHERE id = ?;", [jobId])[0];
+      if (!job) {
+        return json(res, 404, { ok: false, error: "Job not found" });
+      }
+      let logs = "";
+      if (fs.existsSync(job.log_path)) {
+        logs = fs.readFileSync(job.log_path, "utf8");
+      }
+      return json(res, 200, { ok: true, logs });
+    } catch (err) {
+      return json(res, 500, { ok: false, error: err.message });
+    }
+  }
+
+  if (req.url.startsWith("/api/agents/jobs/") && req.url.endsWith("/stop") && req.method === "POST") {
+    const parts = req.url.split("/");
+    const jobId = parts[4];
+    try {
+      const job = dbQuery("SELECT * FROM agent_jobs WHERE id = ?;", [jobId])[0];
+      if (!job) {
+        return json(res, 404, { ok: false, error: "Job not found" });
+      }
+      if (job.status === "running") {
+        if (agentJobQueue.activeJob && agentJobQueue.activeJob.id === jobId) {
+          dbRun("UPDATE agent_jobs SET status = 'failed', completed_at = ? WHERE id = ?;", [new Date().toISOString(), jobId]);
+          fs.appendFileSync(job.log_path, "\n=== JOB CANCELLED BY USER ===\n");
+          agentJobQueue.activeJob = null;
+          agentJobQueue.processNext();
+        } else {
+          dbRun("UPDATE agent_jobs SET status = 'failed', completed_at = ? WHERE id = ?;", [new Date().toISOString(), jobId]);
+        }
+      } else if (job.status === "pending") {
+        dbRun("UPDATE agent_jobs SET status = 'failed', completed_at = ? WHERE id = ?;", [new Date().toISOString(), jobId]);
+      }
+      return json(res, 200, { ok: true });
+    } catch (err) {
+      return json(res, 500, { ok: false, error: err.message });
     }
   }
 

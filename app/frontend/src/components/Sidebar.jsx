@@ -1,5 +1,5 @@
-import React, { memo } from "react";
-import { Image, FolderDown, MessageSquare, Mic, Settings, Shield, Terminal, ChevronDown, ChevronUp, Trash2, Volume2 } from "lucide-react";
+import React, { memo, useState, useEffect } from "react";
+import { Image, FolderDown, MessageSquare, Mic, Settings, Shield, Terminal, ChevronDown, ChevronUp, Trash2, Volume2, Cpu } from "lucide-react";
 
 function formatSidebarDate(value) {
   const date = new Date(value);
@@ -31,8 +31,28 @@ function Sidebar({
   setSelectedTtsOutput,
   showTtsHistory,
   setShowTtsHistory,
-  onDeleteTtsOutput
+  onDeleteTtsOutput,
+  selectedAgentIdForChat,
+  setSelectedAgentIdForChat
 }) {
+  const [showAgents, setShowAgents] = useState(false);
+  const [agents, setAgents] = useState([]);
+
+  const fetchAgents = async () => {
+    try {
+      const res = await fetch("/api/agents");
+      const data = await res.json();
+      if (data.ok) setAgents(data.agents || []);
+    } catch (err) {
+      console.error("Failed to load agents in sidebar:", err);
+    }
+  };
+
+  React.useEffect(() => {
+    fetchAgents();
+    const interval = setInterval(fetchAgents, 4000);
+    return () => clearInterval(interval);
+  }, [activeTab, showAgents]);
   return (
     <div className={`sidebar ${collapsed ? "collapsed" : ""}`}>
       <div>
@@ -160,6 +180,126 @@ function Sidebar({
                         >
                           <Trash2 size={12} />
                         </button>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="nav-item-wrapper" style={{ display: "flex", flexDirection: "column" }}>
+            <div
+              className={`nav-item ${activeTab === "agents" ? "active" : ""}`}
+              onClick={() => setActiveTab("agents")}
+              style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", boxSizing: "border-box" }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                <Cpu size={20} />
+                <span>Агенты</span>
+              </div>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowAgents(!showAgents);
+                }}
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: "inherit",
+                  cursor: "pointer",
+                  padding: "4px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  borderRadius: "50%",
+                  transition: "background-color 0.2s"
+                }}
+                className="history-toggle-arrow"
+                title={showAgents ? "Скрыть список агентов" : "Показать список агентов"}
+              >
+                {showAgents ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+              </button>
+            </div>
+
+            {/* Sidebar Agents List */}
+            {showAgents && (
+              <div 
+                className="sidebar-history-list" 
+                style={{ 
+                  paddingLeft: "14px", 
+                  marginTop: "6px", 
+                  marginBottom: "6px",
+                  display: "flex", 
+                  flexDirection: "column", 
+                  gap: "4px", 
+                  maxHeight: "220px", 
+                  overflowY: "auto",
+                  borderLeft: "2px solid var(--border-color)"
+                }}
+              >
+                <div
+                  onClick={() => {
+                    setSelectedAgentIdForChat("create");
+                    setActiveTab("agents");
+                  }}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    padding: "6px 8px 6px 10px",
+                    borderRadius: "var(--md-shape-corner-small)",
+                    fontSize: "0.78rem",
+                    cursor: "pointer",
+                    color: "var(--md-sys-color-primary)",
+                    fontWeight: "600",
+                    transition: "background 0.2s"
+                  }}
+                  className="sidebar-history-item"
+                >
+                  <Plus size={12} />
+                  <span>Создать агента...</span>
+                </div>
+
+                {agents.length === 0 ? (
+                  <div style={{ padding: "8px 12px", fontSize: "0.78rem", color: "var(--md-sys-color-outline)", opacity: 0.8 }}>
+                    Нет созданных агентов
+                  </div>
+                ) : (
+                  agents.map((agent) => {
+                    const isSelected = selectedAgentIdForChat === agent.id;
+                    return (
+                      <div
+                        key={agent.id}
+                        onClick={() => {
+                          setSelectedAgentIdForChat(agent.id);
+                          setActiveTab("agents");
+                        }}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          padding: "6px 8px 6px 10px",
+                          borderRadius: "var(--md-shape-corner-small)",
+                          fontSize: "0.78rem",
+                          cursor: "pointer",
+                          background: isSelected ? "var(--md-sys-color-secondary-container)" : "transparent",
+                          color: isSelected ? "var(--md-sys-color-on-secondary-container)" : "var(--md-sys-color-on-surface-variant)",
+                          border: isSelected ? "1px solid var(--md-sys-color-outline-variant)" : "1px solid transparent",
+                          transition: "background 0.2s"
+                        }}
+                        className="sidebar-history-item"
+                        title={agent.name}
+                      >
+                        <span style={{
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                          flex: 1,
+                          fontWeight: isSelected ? 600 : 400
+                        }}>
+                          {agent.name}
+                        </span>
                       </div>
                     );
                   })

@@ -33,6 +33,7 @@
   * [Windows Setup](#windows-setup)
   * [Linux Setup](#linux-setup)
   * [macOS Setup](#macos-setup)
+* [🤖 Customized Agents & RAG](#agents-rag)
 * [Hardware Compatibility & Acceleration](#hardware-compatibility-acceleration)
 * [Troubleshooting & FAQ](#troubleshooting-faq)
 * [Building From Source](#building-from-source)
@@ -49,6 +50,7 @@ It unifies four major local AI capabilities into one high-performance desktop in
 2. **💬 Text Chat (LLMs):** Converse privately with open-source language models (GGUF format) powered by official, high-performance `llama.cpp` backends.
 3. **🎙️ Speech-to-Text (Whisper):** Transcribe voice recordings and speech to text in real-time with an integrated `whisper.cpp` engine.
 4. **🗣️ Text-to-Speech (Kokoro TTS):** Convert text outputs into highly natural, lifelike vocal audio offline using the `Kokoro-82M` ONNX model.
+5. **🤖 Customized Agents & RAG:** Create customized local AI agents with unique system prompts, personal or shared knowledge bases (RAG) based on your documents (PDF, TXT, MD), and support for sequential background task execution.
 
 ---
 
@@ -176,6 +178,22 @@ Ensure you have a modern web browser installed. Follow the quick guide below for
    > The prebuilt macOS backend is optimized for **Apple Silicon (M1 or newer)** and uses **Metal** GPU acceleration. *(macOS Intel hardware is completely unsupported)*.
 3. **Add Models:** Drop your weights into `app/models/` or download them via the **Model Manager** tab.
 4. **Generate:** Open `http://localhost:1420` in your browser.
+
+---
+
+## <a id="agents-rag"></a>🤖 Customized Agents & RAG
+
+AI Studio features a built-in engine for local AI agents and a SQLite-powered RAG (Retrieval-Augmented Generation) vector database.
+
+### Key Capabilities:
+* **Global Sidebar Navigation**: The list of your custom agents is displayed in the main sidebar dropdown. You can switch between them instantly or create a new agent via the `+ Create agent...` button.
+* **Direct Agent Chat**: Clicking an agent in the sidebar immediately opens the chat workspace configured specifically for that helper.
+* **Custom Configuration**: Assign a name, description, and custom system prompt to define your agent's personality and behavior guidelines.
+* **Local Knowledge Base (RAG)**: Upload documents in `.pdf`, `.txt`, and `.md` formats. The engine chunks text, generates vector embeddings, and stores them in the local `studio.db` database.
+* **Personal or Shared RAG Access**: Limit loaded documents to a single agent ("Personal RAG") or make them globally accessible ("Shared RAG").
+* **Sequential Background Job Queue (FIFO)**: Queue long-running tasks in the background. Tasks are processed sequentially to protect your GPU VRAM from memory exhaustion. Includes a real-time interactive terminal logs viewer.
+
+All agent configurations, files, vector chunks, and jobs are saved locally in the `app/config/studio.db` SQLite database.
 
 ---
 

@@ -7,6 +7,7 @@ import Settings from "./components/Settings";
 import TextChat from "./components/TextChat";
 import SpeechTranscriber from "./components/SpeechTranscriber";
 import TextToSpeech from "./components/TextToSpeech";
+import AgentsManager from "./components/AgentsManager";
 import { cleanupCandidates, formatBytes, getCleanupCandidates, getDiagnostics, getHardwareSpecs, getHealth, getTelemetry, getBackendOptions, getBackendStatus, listGeneratedOutputs, listLlmConversations, saveLlmConversation, deleteLlmConversation, listSpeechTranscriptions, deleteSpeechTranscription, listTtsOutputs, deleteTtsOutput, stopServer } from "./services/api";
 import "./App.css";
 
@@ -76,6 +77,9 @@ function App() {
   // Generation status
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationProgress, setGenerationProgress] = useState(0);
+
+  // Agent Selection for Chat
+  const [selectedAgentIdForChat, setSelectedAgentIdForChat] = useState(null);
 
   // System Specifications & Telemetry
   const [specs, setSpecs] = useState({
@@ -701,8 +705,10 @@ function App() {
       showTtsHistory={showTtsHistory}
       setShowTtsHistory={setShowTtsHistory}
       onDeleteTtsOutput={handleDeleteTtsOutput}
+      selectedAgentIdForChat={selectedAgentIdForChat}
+      setSelectedAgentIdForChat={setSelectedAgentIdForChat}
     />
-  ), [sidebarVisible, activeTab, specs, conversations, activeConversationId, showHistory, handleDeleteConversation, speechTranscriptions, selectedSpeechTranscript, showSpeechHistory, handleDeleteSpeechTranscription, ttsOutputs, selectedTtsOutput, showTtsHistory, handleDeleteTtsOutput]);
+  ), [sidebarVisible, activeTab, specs, conversations, activeConversationId, showHistory, handleDeleteConversation, speechTranscriptions, selectedSpeechTranscript, showSpeechHistory, handleDeleteSpeechTranscription, ttsOutputs, selectedTtsOutput, showTtsHistory, handleDeleteTtsOutput, selectedAgentIdForChat]);
 
   const handleStopServer = useCallback(async () => {
     if (!serverRunning || isStoppingServer) return;
@@ -821,6 +827,15 @@ function App() {
             onOutputsChanged={refreshTtsOutputs}
             ttsSettings={ttsSettings}
             setTtsSettings={setTtsSettings}
+          />
+        </div>
+
+        <div style={{ display: activeTab === "agents" ? "flex" : "none", flex: 1, flexDirection: "column", overflow: "hidden" }}>
+          <AgentsManager
+            showAlert={showAlert}
+            showConfirm={showConfirm}
+            selectedAgentIdForChat={selectedAgentIdForChat}
+            setSelectedAgentIdForChat={setSelectedAgentIdForChat}
           />
         </div>
 
