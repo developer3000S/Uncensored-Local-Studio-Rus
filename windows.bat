@@ -40,7 +40,7 @@ if not "!FRONTED_PORT!"=="" set "FRONTEND_PORT=!FRONTED_PORT!"
 if not "!API_GPU!"=="" set "BACKEND_PORT=!API_GPU!"
 if not "!TEXT_API!"=="" set "LLM_PORT=!TEXT_API!"
 
-if "%FRONTEND_PORT%"=="" set FRONTEND_PORT=1420
+if "%FRONTEND_PORT%"=="" set FRONTEND_PORT=14200
 if "%LLM_PORT%"=="" set LLM_PORT=10086
 if "%BACKEND_PORT%"=="" set BACKEND_PORT=8080
 
@@ -169,7 +169,7 @@ exit /b %ERRORLEVEL%
 call :is_port_available "%FRONTEND_PORT%"
 if "%PORT_AVAILABLE%"=="1" exit /b 0
 
-for /L %%p in (1421,1,1499) do (
+for /L %%p in (14201,1,14999) do (
     if not "%%p"=="%FRONTEND_PORT%" (
         call :is_port_available "%%p"
         if "!PORT_AVAILABLE!"=="1" (
@@ -179,7 +179,7 @@ for /L %%p in (1421,1,1499) do (
     )
 )
 
-echo  [ОШИБКА] Свободный порт для фронтенда не найден. Проверено: %FRONTEND_PORT% и 1421-1499.
+echo  [ОШИБКА] Свободный порт для фронтенда не найден. Проверено: %FRONTEND_PORT% и 14201-14999.
 exit /b 1
 
 :is_port_available

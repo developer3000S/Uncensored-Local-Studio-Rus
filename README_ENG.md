@@ -37,6 +37,7 @@
 * [Hardware Compatibility & Acceleration](#hardware-compatibility-acceleration)
 * [Troubleshooting & FAQ](#troubleshooting-faq)
 * [Building From Source](#building-from-source)
+* [Making Changes & Commits](#making-changes--commits)
 * [Licensing](#licensing)
 
 ---
@@ -152,7 +153,7 @@ Ensure you have a modern web browser installed. Follow the quick guide below for
    > [!NOTE]
    > On the first run, the script will automatically download a portable Node.js runtime and configure pre-compiled GPU/CPU backend binaries.
 2. **Add Models:** Drop `.safetensors`, `.gguf`, or `.ckpt` weights into `app/models/` (or download them via the **Model Manager** tab in the UI).
-3. **Generate:** Open `http://localhost:1420` in your browser, select your model, and write a prompt.
+3. **Generate:** Open `http://localhost:14200` in your browser, select your model, and write a prompt.
 
 ### Linux Setup
 
@@ -165,7 +166,7 @@ Ensure you have a modern web browser installed. Follow the quick guide below for
    - **AMD Radeon Performance:** Run with **`./linux.sh --max-perf`** to add the ROCm backend (~1.3 GB download).
    - **Intel Core Ultra NPU:** Run with **`./linux.sh --setup-openvino`** to configure Intel NPU support (requires Intel Linux NPU driver).
 3. **Add Models:** Drop your weights into `app/models/` or download them via the **Model Manager** tab.
-4. **Generate:** Open `http://localhost:1420` in your browser.
+4. **Generate:** Open `http://localhost:14200` in your browser.
 
 ### macOS Setup
 
@@ -177,7 +178,7 @@ Ensure you have a modern web browser installed. Follow the quick guide below for
    > [!IMPORTANT]
    > The prebuilt macOS backend is optimized for **Apple Silicon (M1 or newer)** and uses **Metal** GPU acceleration. *(macOS Intel hardware is completely unsupported)*.
 3. **Add Models:** Drop your weights into `app/models/` or download them via the **Model Manager** tab.
-4. **Generate:** Open `http://localhost:1420` in your browser.
+4. **Generate:** Open `http://localhost:14200` in your browser.
 
 ---
 
@@ -258,7 +259,7 @@ All agent configurations, persistent chat history, uploaded files, vector embedd
 
 <details>
   <summary><strong> Port Conflicts: Default port address already busy</strong></summary>
-  <p>The web user interface runs on port <code>1420</code> by default. The GPU backend manager attempts to bind to port <code>8080</code> first, then automatically detects and falls back to a free system port if <code>8080</code> is already occupied.</p>
+  <p>The web user interface runs on port <code>14200</code> by default. The GPU backend manager attempts to bind to port <code>8080</code> first, then automatically detects and falls back to a free system port if <code>8080</code> is already occupied.</p>
 </details>
 
 <details>
@@ -336,6 +337,29 @@ After copying, rename the server binary to match what `scripts/server/serve.cjs`
 - ROCm: `sd` → `sd-rocm`
 
 Then restart the app with `./linux.sh` (Linux) or `./mac.sh` (macOS).
+
+---
+
+## 🔄 Making Changes & Commits
+
+To automate commits and repository updates, use the `update.sh` script.
+
+### Usage
+```bash
+./update.sh "Your commit message"
+```
+
+### What the script does:
+1. Adds `/disk/llm` to Git's safe directories (fixes the dubious ownership issue)
+2. Stages all changes in Git
+3. Creates a commit with the specified message
+4. Pushes changes to the `main` branch on GitHub
+5. Installs npm dependencies and builds the frontend application (Vite + React)
+
+### Requirements
+- Ensure you have write permissions to the repository
+- Node.js and npm must be installed for frontend build
+- Git must be configured with your credentials
 
 ---
 

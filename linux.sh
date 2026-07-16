@@ -56,7 +56,7 @@ if [[ -n "${TEXT_API:-}" ]]; then
   LLM_PORT="$TEXT_API"
 fi
 
-FRONTEND_PORT="${FRONTEND_PORT:-1420}"
+FRONTEND_PORT="${FRONTEND_PORT:-14200}"
 LLM_PORT="${LLM_PORT:-10086}"
 BACKEND_PORT="${BACKEND_PORT:-8080}"
 SETUP_REASON=""
@@ -103,7 +103,7 @@ resolve_frontend_port() {
     return 0
   fi
 
-  for ((port = 1421; port <= 1499; port += 1)); do
+  for ((port = 14201; port <= 14999; port += 1)); do
     if [[ "$port" == "$preferred" ]]; then
       continue
     fi
@@ -113,7 +113,7 @@ resolve_frontend_port() {
     fi
   done
 
-  echo "[ОШИБКА] Не найден свободный порт для фронтенда. Пробовал $preferred и диапазон 1421-1499." >&2
+  echo "[ОШИБКА] Не найден свободный порт для фронтенда. Пробовал $preferred и диапазон 14201-14999." >&2
 
   return 1
 }

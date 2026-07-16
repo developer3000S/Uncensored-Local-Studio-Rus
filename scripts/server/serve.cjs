@@ -36,9 +36,7 @@ try {
 
 // HTTP keep-alive agent for llama-server (eliminates TCP handshake per request)
 const llmHttpAgent = new http.Agent({
-  keepAlive: true,
-  maxSockets: 10,
-  keepAliveMsecs: 30000,
+  keepAlive: false,
 });
 
 const HF_MODEL_CACHE_TTL_MS = 5 * 60 * 1000;
@@ -50,11 +48,27 @@ function readPort(value, fallback) {
   return Number.isInteger(port) && port > 0 && port < 65536 ? port : fallback;
 }
 
-const PORT_FRONTEND = readPort(process.env.PORT || process.env.FRONTEND_PORT || process.env.FRONTED_PORT, 1420);
+function getLocalIP() {
+  const interfaces = os.networkInterfaces();
+  for (const name in interfaces) {
+    const iface = interfaces[name];
+    if (!iface) continue;
+    for (const item of iface) {
+      if (item.internal || item.address === "127.0.0.1" || !item.address.includes(".")) continue;
+      if (item.family === "IPv4") {
+        return item.address;
+      }
+    }
+  }
+  return "localhost";
+}
+
+const PORT_FRONTEND = readPort(process.env.PORT || process.env.FRONTEND_PORT || process.env.FRONTED_PORT, 14200);
 const PREFERRED_BACKEND_PORT = readPort(process.env.BACKEND_PORT || process.env.SD_BACKEND_PORT || process.env.API_GPU, 8080);
 const PREFERRED_LLM_PORT = readPort(process.env.LLM_PORT || process.env.TEXT_API, 10086);
 const PREFERRED_SPEECH_PORT = readPort(process.env.SPEECH_PORT, 10088);
 const PREFERRED_TTS_PORT = readPort(process.env.TTS_PORT, 10089);
+const BACKEND_HOST = process.env.BACKEND_HOST || process.env.HOST || "0.0.0.0";
 let PORT_BACKEND = PREFERRED_BACKEND_PORT;
 let PORT_LLM = PREFERRED_LLM_PORT;
 let PORT_SPEECH = PREFERRED_SPEECH_PORT;
@@ -4347,7 +4361,7 @@ async function startLlmWithBackend(settings = {}, backend) {
 
   const args = [
     "--model", modelPath,
-    "--host", "127.0.0.1",
+    "--host", BACKEND_HOST,
     "--port", String(PORT_LLM),
     "--embedding",
     "-lv", "1",
@@ -4546,6 +4560,7 @@ async function startBackend(settings = {}) {
   if (requestedBackend === "apple-npu") {
     args = [
       path.join(ROOT, "scripts", "workers", "coreml_server.py"),
+      "--listen-host", BACKEND_HOST,
       "--listen-port", String(PORT_BACKEND),
       "--model",       currentSettings.model,
       "--steps",       String(currentSettings.steps),
@@ -4553,6 +4568,7 @@ async function startBackend(settings = {}) {
     ];
   } else {
     args = [
+      "--listen-host", BACKEND_HOST,
       "--listen-port", String(PORT_BACKEND),
       "--model",       currentSettings.model,
       "--steps",       String(currentSettings.steps),
@@ -6316,6 +6332,14 @@ function json(res, code, obj) {
 
 // ── HTTP Server ───────────────────────────────────────────────────────────────
 const server = http.createServer(async (req, res) => {
+  let urlPath = req.url.split("?")[0];
+  if (urlPath.length > 1 && urlPath.endsWith("/")) {
+    urlPath = urlPath.slice(0, -1);
+  }
+  console.log(`[HTTP Request] Method: ${req.method}, URL: ${req.url}, Path: ${urlPath}`);
+  console.log(`[HTTP Debug] startsWith: ${urlPath.startsWith("/api/agents/")}, endsWith: ${urlPath.endsWith("/chat")}, method: ${req.method}`);
+
+
   // CORS preflight
   if (req.method === "OPTIONS") {
     res.writeHead(204, { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "Content-Type", "Access-Control-Allow-Methods": "GET,POST" });
@@ -7661,7 +7685,7 @@ async function getLlmfitRecommendations(useCase = "chat", limit = 10) {
   }
 
   // ── Agents API ────────────────────────────────────────────────────────────
-  if (req.url === "/api/agents" && req.method === "GET") {
+  if (urlPath === "/api/agents" && req.method === "GET") {
     try {
       const agents = dbQuery("SELECT * FROM agents ORDER BY created_at DESC;");
       return json(res, 200, { ok: true, agents });
@@ -7670,7 +7694,7 @@ async function getLlmfitRecommendations(useCase = "chat", limit = 10) {
     }
   }
 
-  if (req.url === "/api/agents" && req.method === "POST") {
+  if (urlPath === "/api/agents" && req.method === "POST") {
     try {
       const body = await readJsonBody(req, res);
       if (!body) return;
@@ -7689,8 +7713,8 @@ async function getLlmfitRecommendations(useCase = "chat", limit = 10) {
     }
   }
 
-  if (req.url.startsWith("/api/agents/") && req.method === "PUT") {
-    const parts = req.url.split("/");
+  if (urlPath.startsWith("/api/agents/") && req.method === "PUT") {
+    const parts = urlPath.split("/");
     const id = parts[3];
     try {
       const body = await readJsonBody(req, res);
@@ -7706,26 +7730,28 @@ async function getLlmfitRecommendations(useCase = "chat", limit = 10) {
     }
   }
 
-  if (req.url.startsWith("/api/agents/") && req.method === "DELETE") {
-    const parts = req.url.split("/");
-    const id = parts[3];
-    try {
-      const files = dbQuery("SELECT file_path FROM rag_files WHERE agent_id = ?;", [id]);
-      for (const file of files) {
-        try { fs.unlinkSync(file.file_path); } catch (_) {}
+  if (urlPath.startsWith("/api/agents/") && req.method === "DELETE") {
+    const parts = urlPath.split("/");
+    if (parts.length === 4) {
+      const id = parts[3];
+      try {
+        const files = dbQuery("SELECT file_path FROM rag_files WHERE agent_id = ?;", [id]);
+        for (const file of files) {
+          try { fs.unlinkSync(file.file_path); } catch (_) {}
+        }
+        dbRun("DELETE FROM agents WHERE id = ?;", [id]);
+        dbRun("DELETE FROM rag_files WHERE agent_id = ?;", [id]);
+        dbRun("DELETE FROM agent_chats WHERE agent_id = ?;", [id]);
+        dbRun("DELETE FROM agent_jobs WHERE agent_id = ?;", [id]);
+        return json(res, 200, { ok: true });
+      } catch (err) {
+        return json(res, 500, { ok: false, error: err.message });
       }
-      dbRun("DELETE FROM agents WHERE id = ?;", [id]);
-      dbRun("DELETE FROM rag_files WHERE agent_id = ?;", [id]);
-      dbRun("DELETE FROM agent_chats WHERE agent_id = ?;", [id]);
-      dbRun("DELETE FROM agent_jobs WHERE agent_id = ?;", [id]);
-      return json(res, 200, { ok: true });
-    } catch (err) {
-      return json(res, 500, { ok: false, error: err.message });
     }
   }
 
-  if (req.url.startsWith("/api/agents/") && req.url.includes("/rag/upload") && req.method === "POST") {
-    const parts = req.url.split("/");
+  if (urlPath.startsWith("/api/agents/") && urlPath.includes("/rag/upload") && req.method === "POST") {
+    const parts = urlPath.split("/");
     const id = parts[3];
     try {
       const parsed = new URL(req.url, `http://${req.headers.host || "localhost"}`);
@@ -7770,8 +7796,9 @@ async function getLlmfitRecommendations(useCase = "chat", limit = 10) {
     }
   }
 
-  if (req.url.startsWith("/api/agents/") && req.url.endsWith("/rag/files") && req.method === "GET") {
-    const parts = req.url.split("/");
+
+  if (urlPath.startsWith("/api/agents/") && urlPath.endsWith("/rag/files") && req.method === "GET") {
+    const parts = urlPath.split("/");
     const id = parts[3];
     try {
       const agent = dbQuery("SELECT * FROM agents WHERE id = ?;", [id])[0];
@@ -7790,8 +7817,8 @@ async function getLlmfitRecommendations(useCase = "chat", limit = 10) {
     }
   }
 
-  if (req.url.startsWith("/api/agents/") && req.url.includes("/rag/files/") && req.method === "DELETE") {
-    const parts = req.url.split("/");
+  if (urlPath.startsWith("/api/agents/") && urlPath.includes("/rag/files/") && req.method === "DELETE") {
+    const parts = urlPath.split("/");
     const fileId = parts[6];
     try {
       const file = dbQuery("SELECT * FROM rag_files WHERE id = ?;", [fileId])[0];
@@ -7807,8 +7834,8 @@ async function getLlmfitRecommendations(useCase = "chat", limit = 10) {
     }
   }
 
-  if (req.url.startsWith("/api/agents/") && req.url.endsWith("/run-background") && req.method === "POST") {
-    const parts = req.url.split("/");
+  if (urlPath.startsWith("/api/agents/") && urlPath.endsWith("/run-background") && req.method === "POST") {
+    const parts = urlPath.split("/");
     const id = parts[3];
     try {
       const body = await readJsonBody(req, res);
@@ -7836,8 +7863,8 @@ async function getLlmfitRecommendations(useCase = "chat", limit = 10) {
     }
   }
 
-  if (req.url.startsWith("/api/agents/") && req.url.endsWith("/jobs") && req.method === "GET") {
-    const parts = req.url.split("/");
+  if (urlPath.startsWith("/api/agents/") && urlPath.endsWith("/jobs") && req.method === "GET") {
+    const parts = urlPath.split("/");
     const id = parts[3];
     try {
       const jobs = dbQuery("SELECT * FROM agent_jobs WHERE agent_id = ? ORDER BY created_at DESC;", [id]);
@@ -7847,8 +7874,8 @@ async function getLlmfitRecommendations(useCase = "chat", limit = 10) {
     }
   }
 
-  if (req.url.startsWith("/api/agents/") && req.url.endsWith("/chats") && req.method === "GET") {
-    const parts = req.url.split("/");
+  if (urlPath.startsWith("/api/agents/") && urlPath.endsWith("/chats") && req.method === "GET") {
+    const parts = urlPath.split("/");
     const id = parts[3];
     try {
       const chats = dbQuery("SELECT role, content, created_at FROM agent_chats WHERE agent_id = ? ORDER BY created_at ASC;", [id]);
@@ -7858,8 +7885,8 @@ async function getLlmfitRecommendations(useCase = "chat", limit = 10) {
     }
   }
 
-  if (req.url.startsWith("/api/agents/") && req.url.endsWith("/chats") && req.method === "DELETE") {
-    const parts = req.url.split("/");
+  if (urlPath.startsWith("/api/agents/") && urlPath.endsWith("/chats") && req.method === "DELETE") {
+    const parts = urlPath.split("/");
     const id = parts[3];
     try {
       dbRun("DELETE FROM agent_chats WHERE agent_id = ?;", [id]);
@@ -7869,8 +7896,8 @@ async function getLlmfitRecommendations(useCase = "chat", limit = 10) {
     }
   }
 
-  if (req.url.startsWith("/api/agents/") && req.url.endsWith("/chat") && req.method === "POST") {
-    const parts = req.url.split("/");
+  if (urlPath.startsWith("/api/agents/") && urlPath.endsWith("/chat") && req.method === "POST") {
+    const parts = urlPath.split("/");
     const id = parts[3];
     try {
       const body = await readJsonBody(req, res);
@@ -7923,11 +7950,27 @@ async function getLlmfitRecommendations(useCase = "chat", limit = 10) {
         console.error("  [agent-chat] Failed to fetch chat history:", err);
       }
 
-      const messages = [
+      let messages = [
         { role: "system", content: systemPrompt },
         ...chatHistory,
         { role: "user", content: message }
       ];
+
+      // Ensure strictly alternating roles (user/assistant) to prevent llama-server Jinja template failures
+      const alternating = [];
+      for (const msg of messages) {
+        if (alternating.length === 0) {
+          alternating.push(msg);
+        } else {
+          const last = alternating[alternating.length - 1];
+          if (last.role === msg.role) {
+            last.content = (last.content || "") + "\n" + (msg.content || "");
+          } else {
+            alternating.push(msg);
+          }
+        }
+      }
+      messages = alternating;
 
       // Web Search integration
       const webAugmentation = await augmentMessagesWithWebSearch(messages, body);
@@ -8070,6 +8113,7 @@ async function getLlmfitRecommendations(useCase = "chat", limit = 10) {
       res.on("close", () => {
         if (!res.writableEnded && activeClientReq && !activeClientReq.destroyed) activeClientReq.destroy();
       });
+      return;
 
     } catch (err) {
       console.error("  [agent-chat] Chat processing failed:", err);
@@ -8079,8 +8123,8 @@ async function getLlmfitRecommendations(useCase = "chat", limit = 10) {
     }
   }
 
-  if (req.url.startsWith("/api/agents/jobs/") && req.url.endsWith("/status") && req.method === "GET") {
-    const parts = req.url.split("/");
+  if (urlPath.startsWith("/api/agents/jobs/") && urlPath.endsWith("/status") && req.method === "GET") {
+    const parts = urlPath.split("/");
     const jobId = parts[4];
     try {
       const job = dbQuery("SELECT * FROM agent_jobs WHERE id = ?;", [jobId])[0];
@@ -8093,8 +8137,8 @@ async function getLlmfitRecommendations(useCase = "chat", limit = 10) {
     }
   }
 
-  if (req.url.startsWith("/api/agents/jobs/") && req.url.endsWith("/logs") && req.method === "GET") {
-    const parts = req.url.split("/");
+  if (urlPath.startsWith("/api/agents/jobs/") && urlPath.endsWith("/logs") && req.method === "GET") {
+    const parts = urlPath.split("/");
     const jobId = parts[4];
     try {
       const job = dbQuery("SELECT * FROM agent_jobs WHERE id = ?;", [jobId])[0];
@@ -8111,8 +8155,8 @@ async function getLlmfitRecommendations(useCase = "chat", limit = 10) {
     }
   }
 
-  if (req.url.startsWith("/api/agents/jobs/") && req.url.endsWith("/stop") && req.method === "POST") {
-    const parts = req.url.split("/");
+  if (urlPath.startsWith("/api/agents/jobs/") && urlPath.endsWith("/stop") && req.method === "POST") {
+    const parts = urlPath.split("/");
     const jobId = parts[4];
     try {
       const job = dbQuery("SELECT * FROM agent_jobs WHERE id = ?;", [jobId])[0];
@@ -8166,6 +8210,7 @@ server.listen(PORT_FRONTEND, "0.0.0.0", () => {
   console.log("   UNCENSORED AI STUDIO      |  Running");
   console.log("   Server Build: " + SERVER_BUILD);
   console.log("   Frontend : http://localhost:" + PORT_FRONTEND);
+  console.log("   Frontend (LAN): http://" + getLocalIP() + ":" + PORT_FRONTEND + " (accessible from local network)");
   console.log("   Image API: http://127.0.0.1:" + PORT_BACKEND);
   console.log("   Text API : starts on http://127.0.0.1:" + PREFERRED_LLM_PORT);
   console.log("   Speech   : managed locally, API on frontend port");

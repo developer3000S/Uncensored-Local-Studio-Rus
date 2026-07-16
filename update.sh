@@ -14,6 +14,9 @@ COMMIT_MSG="$1"
 
 echo "--- Starting GitHub update ---"
 
+# Fix git dubious ownership issue
+git config --global --add safe.directory /disk/llm
+
 # 1. Adding all changes
 echo "[1/4] Adding files..."
 git add .
@@ -30,7 +33,7 @@ git push origin main --no-thin
 
 # 4. Rebuild frontend
 echo "[4/4] Rebuild frontend ..."
-cd app/frontend && node node_modules/vite/bin/vite.js build
+cd app/frontend && npm install && npm run build && cd ../..
 
 if [ $? -eq 0 ]; then
     echo "--- Success: Repository updated! ---"
