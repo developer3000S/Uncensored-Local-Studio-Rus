@@ -4610,7 +4610,7 @@ async function startBackend(settings = {}) {
     ];
   } else {
     args = [
-      "--listen-host", BACKEND_HOST,
+      "--listen-ip", BACKEND_HOST,
       "--listen-port", String(PORT_BACKEND),
       "--model",       currentSettings.model,
       "--steps",       String(currentSettings.steps),

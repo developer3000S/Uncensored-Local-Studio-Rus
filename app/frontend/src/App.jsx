@@ -102,8 +102,8 @@ function App() {
 
   // Default Image Constraints
   const [constraints, setConstraints] = useState({
-    width: 1024,
-    height: 1024,
+    width: 512,
+    height: 512,
     steps: 4,          // Recommended default steps for Flux.1 Schnell/Lightning
     npuSteps: 4,
     standardSteps: 20,
@@ -644,8 +644,8 @@ function App() {
           steps: 4,
           standardSteps: 4,
           cfgScale: 1.5,
-          width: 1024,
-          height: 1024,
+          width: 512,
+          height: 512,
         }));
       } else if (name.includes("sd15")) {
         setConstraints((prev) => ({
@@ -662,8 +662,8 @@ function App() {
           steps: 20,
           standardSteps: 20,
           cfgScale: 4.5,
-          width: 1024,
-          height: 1024,
+          width: 512,
+          height: 512,
         }));
       } else {
         // Fallback for custom or SD 1.x models (like CyberRealistic or arbitrary safetensors)
