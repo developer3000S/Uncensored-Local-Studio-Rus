@@ -4234,6 +4234,48 @@ function fixMissingSharedLibraries(backendDir) {
           fs.copyFileSync(srcPath, destBasePath);
         }
       }
+      // Also handle unversioned .so files (e.g., libllama-server-impl.so)
+      if (file.endsWith(".so") && !file.match(/\.\d+\./)) {
+        const libName = file;
+        // Copy to standard locations for RUNPATH resolution
+        const libPath = path.join(backendDir, file);
+        
+        // Create symlinks for versioned library names (.so.0) that dependents expect
+        // Many binaries expect libfoo.so.0 but we have libfoo.so
+        const baseName = file.replace(/\.so$/, "");
+        const versionedName = baseName + ".so.0";
+        const versionedPath = path.join(backendDir, versionedName);
+        if (!fs.existsSync(versionedPath)) {
+          try {
+            fs.symlinkSync(file, versionedPath);
+            console.log(`  [backend-fix] Creating symlink for versioned library: ${versionedName} -> ${file}`);
+          } catch (_) {}
+        }
+        
+        // Create /tmp/uais-build-llama/build-cpu/bin if binary has that RUNPATH
+        const tmpBuildPath = "/tmp/uais-build-llama/build-cpu/bin";
+        if (!fs.existsSync(tmpBuildPath)) {
+          try {
+            fs.mkdirSync(tmpBuildPath, { recursive: true });
+            console.log(`  [backend-fix] Created directory: ${tmpBuildPath}`);
+          } catch (_) {}
+        }
+        if (fs.existsSync(tmpBuildPath)) {
+          const destPath = path.join(tmpBuildPath, file);
+          if (!fs.existsSync(destPath)) {
+            console.log(`  [backend-fix] Copying unversioned library to RUNPATH: ${file} -> ${destPath}`);
+            fs.copyFileSync(libPath, destPath);
+          }
+          // Also create versioned symlink in RUNPATH location
+          const tmpVersionedPath = path.join(tmpBuildPath, versionedName);
+          if (!fs.existsSync(tmpVersionedPath)) {
+            try {
+              fs.symlinkSync(file, tmpVersionedPath);
+              console.log(`  [backend-fix] Creating versioned symlink in RUNPATH: ${versionedName} -> ${file}`);
+            } catch (_) {}
+          }
+        }
+      }
     }
   } catch (err) {
     console.error("  [backend-fix] Error ensuring shared library files:", err);
@@ -6336,9 +6378,6 @@ const server = http.createServer(async (req, res) => {
   if (urlPath.length > 1 && urlPath.endsWith("/")) {
     urlPath = urlPath.slice(0, -1);
   }
-  console.log(`[HTTP Request] Method: ${req.method}, URL: ${req.url}, Path: ${urlPath}`);
-  console.log(`[HTTP Debug] startsWith: ${urlPath.startsWith("/api/agents/")}, endsWith: ${urlPath.endsWith("/chat")}, method: ${req.method}`);
-
 
   // CORS preflight
   if (req.method === "OPTIONS") {
