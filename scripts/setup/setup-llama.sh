@@ -68,6 +68,17 @@ has_linux_gpu_vendor() {
   grep -Ril "$vendor" /sys/bus/pci/devices/*/vendor >/dev/null 2>&1
 }
 
+check_vulkan_sdk() {
+  command -v glslc >/dev/null 2>&1 || return 1
+  if command -v pkg-config >/dev/null 2>&1 && pkg-config --exists vulkan; then
+    return 0
+  fi
+  if [[ -f /usr/include/vulkan/vulkan.h ]] && ldconfig -p 2>/dev/null | grep -q libvulkan; then
+    return 0
+  fi
+  return 1
+}
+
 build_llama_from_source() {
   local backend="$1" # "cpu", "vulkan", "cuda"
   local dest_dir="$2"
@@ -75,6 +86,16 @@ build_llama_from_source() {
   if [[ -x "$dest_dir/llama-server" ]]; then
     echo "   OK   llama.cpp $backend backend already ready: $dest_dir"
     return 0
+  fi
+
+  if [[ "$backend" == "vulkan" ]] && ! check_vulkan_sdk; then
+    echo "   !!   Vulkan SDK not found: skipping optional Vulkan GPU backend." >&2
+    echo "        Install the SDK first, then re-run this script:" >&2
+    echo "          Debian/Ubuntu : sudo apt install libvulkan-dev vulkan-tools glslc" >&2
+    echo "          Fedora        : sudo dnf install vulkan-loader-devel vulkan-tools shaderc" >&2
+    echo "          Arch          : sudo pacman -S vulkan-headers vulkan-tools shaderc" >&2
+    echo "        The CPU backend remains fully functional without it." >&2
+    return 1
   fi
 
   echo "   >>   Building llama.cpp $backend backend from source..."

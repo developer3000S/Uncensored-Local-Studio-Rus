@@ -398,7 +398,7 @@ function TextChat({
 
   const refresh = useCallback(async () => {
     const [nextModels, nextStatus] = await Promise.all([listLlmModels(), getLlmStatus()]);
-    const selectableModels = nextModels.filter((model) => !model.isProjector);
+    const selectableModels = nextModels.filter((model) => !model.isProjector && !model.isEmbedding && !model.loadFailed);
     setModels(selectableModels);
     setStatus(nextStatus);
     const active = nextStatus.settings?.model;

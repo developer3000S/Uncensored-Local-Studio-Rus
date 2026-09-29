@@ -52,8 +52,9 @@ echo ""
 
 mkdir -p "$RUNTIME_DIR" "$MODELS_DIR" "$OUTPUTS_DIR" "$CACHE_DIR"
 
-if [[ ! -x "$NODE_BIN" || ! -x "$NPM_BIN" ]]; then
-  print_fail "Portable Node.js is missing. Run scripts/setup/setup.sh first."
+if [[ ! -x "$NODE_BIN" || ! -x "$NPM_BIN" ]] || ! "$NPM_BIN" --version >/dev/null 2>&1; then
+  print_fail "Portable Node.js/npm is missing or broken (lib/node_modules/npm not found)."
+  print_fail "Re-run scripts/setup/setup.sh first to reinstall portable Node.js."
   exit 1
 fi
 

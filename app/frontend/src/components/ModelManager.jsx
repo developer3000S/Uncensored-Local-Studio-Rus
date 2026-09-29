@@ -336,11 +336,11 @@ function ModelManager({
     : localModels.map(normalizeModel).filter((model) => model.filename);
   const displayedLocalModels = activeModelType === "speech" || activeModelType === "tts"
     ? normalizedLocalModels.filter((model) => model.installed)
-    : normalizedLocalModels.filter((model) => !model.isProjector);
+    : normalizedLocalModels.filter((model) => !model.isProjector && !model.isEmbedding);
   const allModelNames = activeModelType === "speech" || activeModelType === "tts"
     ? displayedLocalModels.map((model) => model.filename)
     : normalizedLocalModels.map((model) => model.filename);
-  const modelNames = displayedLocalModels.map((model) => model.filename);
+  const modelNames = displayedLocalModels.filter((model) => !model.loadFailed).map((model) => model.filename);
   const isBusy = loadingModelId !== null || isUnloading;
   
   const openvinoSupported = Boolean(backendOptions?.openvinoNpu?.supported);
@@ -1541,6 +1541,9 @@ function ModelManager({
             {displayedLocalModels.map((model) => {
               const filename = model.filename;
               const isActive = activeModelType === "image" ? activeModel === filename : activeModelType === "text" ? activeLlmModel === filename : activeModelType === "speech" ? activeSpeechModel === filename : activeTtsModel === filename;
+              const broken = Boolean(model.loadFailed);
+              const projector = Boolean(model.isProjector);
+              const embedding = Boolean(model.isEmbedding);
               
               return (
                 <div 
@@ -1571,16 +1574,31 @@ function ModelManager({
                   </div>
                   
                   <div style={{ display: "flex", gap: "8px" }}>
-                    {isActive ? (
+                    {broken || projector || embedding ? (
+                      <>
+                        <span style={{ fontSize: "0.72rem", opacity: 0.75, alignSelf: "center", maxWidth: "230px" }}>
+                          {broken ? "❌ Ошибка загрузки" : projector ? "👁 Проектор (не текстовая)" : "🔎 Embedding-модель"}
+                        </span>
+                        <button
+                          className="m3-btn m3-btn-error"
+                          style={{ height: "36px", width: "36px", padding: 0, minWidth: "36px" }}
+                          onClick={() => handleDeleteModel(filename)}
+                          disabled={isBusy}
+                          title="Delete from models folder"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </>
+                    ) : isActive ? (
                       <button className="m3-btn m3-btn-error" style={{ height: "36px", padding: "0 16px" }} onClick={() => handleUnloadModel()} disabled={isUnloading}>
                         {isUnloading ? <RefreshCw className="progress-spinner" size={14} /> : <Trash2 size={14} />}
                         <span>{isUnloading ? "Unloading" : "Unload"}</span>
                       </button>
                     ) : (
                       <>
-                        <button 
-                          className="m3-btn m3-btn-filled" 
-                          style={{ height: "36px", padding: "0 16px" }} 
+                        <button
+                          className="m3-btn m3-btn-filled"
+                          style={{ height: "36px", padding: "0 16px" }}
                           onClick={() => handleLoadModel(filename)}
                           disabled={isBusy}
                         >

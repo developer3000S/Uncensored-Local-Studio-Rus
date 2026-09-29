@@ -1981,20 +1981,118 @@ function getLlmBackendCandidates() {
   return probe.available;
 }
 
+// Reads the GGUF metadata header of a model file to classify it.
+// llama.cpp can only run text-generation architectures; vision/audio projectors
+// (CLIP-based mmproj sidecars) and pure embedding models (BERT) load fine as
+// embedders but cannot answer chat completions, so the UI must not offer them
+// as selectable text models.
+const GGUF_NON_TEXT_ARCHITECTURES = new Set(["clip"]);
+const GGUF_EMBEDDING_ARCHITECTURES = new Set(["bert", "nomic-bert", "jina"]);
+
+function readGgufArchitecture(filePath) {
+  let handle = null;
+  try {
+    handle = fs.openSync(filePath, "r");
+    // GGUF: magic[4] version[4] n_tensors[8] n_kv[8], then n_kv metadata pairs.
+    const header = Buffer.alloc(24);
+    if (fs.readSync(handle, header, 0, 24, 0) !== 24) return "";
+    if (header.toString("ascii", 0, 4) !== "GGUF") return "";
+    const nKv = header.readBigUInt64LE(16);
+    let offset = 24;
+    for (let i = 0n; i < nKv; i += 1n) {
+      const lenBuf = Buffer.alloc(8);
+      if (fs.readSync(handle, lenBuf, 0, 8, offset) !== 8) return "";
+      const keyLen = Number(lenBuf.readBigUInt64LE(0));
+      offset += 8;
+      if (keyLen <= 0 || keyLen > 4096) return "";
+      const keyBuf = Buffer.alloc(keyLen);
+      if (fs.readSync(handle, keyBuf, 0, keyLen, offset) !== keyLen) return "";
+      offset += keyLen;
+      const key = keyBuf.toString("utf8");
+      const typeBuf = Buffer.alloc(4);
+      if (fs.readSync(handle, typeBuf, 0, 4, offset) !== 4) return "";
+      const valueType = typeBuf.readInt32LE(0);
+      offset += 4;
+      if (key !== "general.architecture") {
+        offset = skipGgufValue(handle, offset, valueType);
+        if (offset < 0) return "";
+        continue;
+      }
+      if (valueType !== 8) return ""; // string
+      const strLenBuf = Buffer.alloc(8);
+      if (fs.readSync(handle, strLenBuf, 0, 8, offset) !== 8) return "";
+      const strLen = Number(strLenBuf.readBigUInt64LE(0));
+      offset += 8;
+      if (strLen <= 0 || strLen > 4096) return "";
+      const strBuf = Buffer.alloc(strLen);
+      if (fs.readSync(handle, strBuf, 0, strLen, offset) !== strLen) return "";
+      return strBuf.toString("utf8");
+    }
+  } catch (_) {
+    return "";
+  } finally {
+    if (handle !== null) {
+      try { fs.closeSync(handle); } catch (_) { /* already closed */ }
+    }
+  }
+  return "";
+}
+
+// Returns the byte offset just past a GGUF metadata value, or -1 on malformed data.
+function skipGgufValue(handle, offset, valueType) {
+  const TYPE_SIZES = { 0: 1, 1: 1, 2: 2, 3: 2, 4: 4, 5: 4, 6: 8, 7: 8, 8: null, 9: null, 10: 8, 11: 8, 12: 8 };
+  try {
+    if (valueType === 8) { // string
+      const lenBuf = Buffer.alloc(8);
+      if (fs.readSync(handle, lenBuf, 0, 8, offset) !== 8) return -1;
+      const len = Number(lenBuf.readBigUInt64LE(0));
+      if (len < 0 || len > 1_000_000) return -1;
+      return offset + 8 + len;
+    }
+    if (valueType === 9) { // array
+      const hdr = Buffer.alloc(12);
+      if (fs.readSync(handle, hdr, 0, 12, offset) !== 12) return -1;
+      const elemType = hdr.readInt32LE(0);
+      const count = Number(hdr.readBigUInt64LE(4));
+      if (count > 10_000_000) return -1;
+      let cursor = offset + 12;
+      for (let i = 0; i < count; i += 1) {
+        cursor = skipGgufValue(handle, cursor, elemType);
+        if (cursor < 0) return -1;
+      }
+      return cursor;
+    }
+    const size = TYPE_SIZES[valueType];
+    if (size === undefined) return -1;
+    return offset + size;
+  } catch (_) {
+    return -1;
+  }
+}
+
 function getLlmModels() {
   try {
     return fs.readdirSync(LLM_MODELS)
       .filter((filename) => filename.toLowerCase().endsWith(".gguf"))
       .map((filename) => {
-        const stats = fs.statSync(path.join(LLM_MODELS, filename));
+        const filePath = path.join(LLM_MODELS, filename);
+        const stats = fs.statSync(filePath);
         const lower = filename.toLowerCase();
+        const architecture = readGgufArchitecture(filePath);
+        const isProjector = lower.includes("mmproj") || GGUF_NON_TEXT_ARCHITECTURES.has(architecture);
+        const isEmbedding = GGUF_EMBEDDING_ARCHITECTURES.has(architecture);
         return {
           filename,
           name: filename,
           sizeBytes: stats.size,
           size: formatBytes(stats.size),
           format: "GGUF",
-          isProjector: lower.includes("mmproj"),
+          architecture,
+          isProjector,
+          isEmbedding,
+          // A previous load failure on every backend means the file is broken
+          // (unsupported architecture, truncated, custom tensor packing).
+          loadFailed: Boolean(getLlmModelSettings(filename).loadFailed),
         };
       });
   } catch (_) {
@@ -4153,6 +4251,14 @@ async function startLlm(settings = {}) {
     throw new Error("Text generation requires a .gguf model.");
   }
 
+  const architecture = readGgufArchitecture(modelPath);
+  if (GGUF_NON_TEXT_ARCHITECTURES.has(architecture)) {
+    throw new Error(`${filename} is a vision/audio projector (${architecture || "CLIP"}), not a text model.`);
+  }
+  if (GGUF_EMBEDDING_ARCHITECTURES.has(architecture)) {
+    throw new Error(`${filename} is an embedding model (${architecture}) and cannot generate text.`);
+  }
+
   const candidates = getLlmBackendCandidates();
   if (candidates.length === 0) {
     throw new Error("llama.cpp is not installed. Run the platform setup script to install the text backend.");
@@ -4205,7 +4311,15 @@ async function startLlm(settings = {}) {
 
   const last = failures[failures.length - 1];
   llmSettings.backendFallbacks = failures;
-  throw new Error(`Text model failed on all available llama.cpp backends. Last failure: ${last?.error || "unknown error"}`);
+  // A failure caused by the model file itself (unsupported/truncated/corrupt)
+  // will never succeed on any backend, so flag it to hide the model in the UI.
+  const modelError = last?.error || "";
+  if (/architecture|wrong number of tensors|failed to read tensor|invalid gguf|unexpected|unsupported/i.test(modelError)) {
+    try {
+      updateLlmModelSettings(filename, { loadFailed: true, loadError: modelError.slice(-300) });
+    } catch (_) { /* persistence is best-effort */ }
+  }
+  throw new Error(`Text model failed on all available llama.cpp backends. Last failure: ${modelError || "unknown error"}`);
 }
 
 function fixMissingSharedLibraries(backendDir) {
@@ -4837,9 +4951,10 @@ async function startBackend(settings = {}) {
     backendReady = false;
     backendProc  = null;
     console.log("  [backend] exited with code", code, signal ? `(signal ${signal})` : "", `(process ${procSeq})`);
-    if (code !== null && code !== 0) {
+    const abnormalExit = (code !== null && code !== 0) || Boolean(signal);
+    if (abnormalExit) {
       if (!backendError) {
-        backendError = describeBackendExitCode(code, currentSettings.backendBinary || BACKEND_PATH);
+        backendError = describeBackendExitCode(code, currentSettings.backendBinary || BACKEND_PATH, signal);
       }
     }
     backendLoadState.active = false;
@@ -5545,10 +5660,25 @@ function describeLinuxRuntimeLinkerError(rawError) {
   return `${raw}\n\nThe selected model is not the problem. The Linux backend binary cannot start because this OS is missing ${requirementText}. The bundled Linux backends are built for Ubuntu 24.04-era systems. Use Ubuntu 24.04+, Fedora 40+, another glibc 2.38+ distro, or build stable-diffusion.cpp from source on this machine.`;
 }
 
-function describeBackendExitCode(code, backendPath) {
-  const numericCode = Number(code);
+function describeBackendExitCode(code, backendPath, signal) {
+  const backendName = path.basename(backendPath || BACKEND_PATH || "backend");
+  const sig = String(signal || "").toUpperCase();
+  // Node reports SIGILL as signal "SIGILL" with code null (or exit 128+4=132).
+  const numericCode = code === null || code === undefined ? NaN : Number(code);
+  const isSigill = sig === "SIGILL" || numericCode === 132 || numericCode === 4;
+  if (isSigill) {
+    return (
+      `exited with SIGILL (Illegal instruction) while starting ${backendName}.\n\n` +
+      `This almost always means the binary was compiled for a newer CPU than this machine ` +
+      `(e.g. AVX2/FMA code on an AVX-only CPU such as Sandy Bridge). ` +
+      `Prebuilt Linux backends and binaries copied from another host often hit this.\n\n` +
+      `Fix: rebuild the image backend on this machine with AVX2 disabled, for example:\n` +
+      `  bash scripts/build/build_from_source.sh\n` +
+      `or re-run setup (it auto-compiles from source when AVX2 is missing):\n` +
+      `  bash scripts/setup/setup.sh`
+    );
+  }
   if (osPlatform === "win32" && numericCode === 3221225781) {
-    const backendName = path.basename(backendPath || BACKEND_PATH || "backend");
     const lowerBackend = backendName.toLowerCase();
     const isVulkan = lowerBackend.includes("vulkan");
     const isCuda = lowerBackend.includes("cuda");
@@ -5566,6 +5696,9 @@ function describeBackendExitCode(code, backendPath) {
     return `exited with code ${code} (0xC0000135: required DLL not found).\n\nWindows could not start ${backendName} because ${likelyMissing} is missing or not loadable. ${driverHint}\n\nIf you are using an AMD/Intel GPU, update the AMD/Intel graphics driver first. If the GPU is too old for the current Vulkan backend, switch the backend to CPU.`;
   }
 
+  if (signal) {
+    return `exited with signal ${signal}`;
+  }
   return `exited with code ${code}`;
 }
 

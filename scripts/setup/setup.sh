@@ -272,11 +272,32 @@ check_linux_runtime_abi() {
   print_ok "Linux runtime ABI ready: glibc $current_glibc, GLIBCXX_$current_glibcxx"
 }
 
+check_vulkan_sdk() {
+  command -v glslc >/dev/null 2>&1 || return 1
+  if command -v pkg-config >/dev/null 2>&1 && pkg-config --exists vulkan; then
+    return 0
+  fi
+  if [[ -f /usr/include/vulkan/vulkan.h ]] && ldconfig -p 2>/dev/null | grep -q libvulkan; then
+    return 0
+  fi
+  return 1
+}
+
 build_sd_from_source() {
   local backend="$1" # "cpu" or "vulkan"
   local dest_dir="$2"
   local main_name="$3"
   local server_name="$4"
+
+  if [[ "$backend" == "vulkan" ]] && ! check_vulkan_sdk; then
+    print_warn "Vulkan SDK not found: skipping optional Vulkan GPU backend."
+    print_info "Install the SDK first, then re-run this script:"
+    print_info "  Debian/Ubuntu : sudo apt install libvulkan-dev vulkan-tools glslc"
+    print_info "  Fedora        : sudo dnf install vulkan-loader-devel vulkan-tools shaderc"
+    print_info "  Arch          : sudo pacman -S vulkan-headers vulkan-tools shaderc"
+    print_info "The CPU backend remains fully functional without it."
+    return 1
+  fi
 
   print_info "Building stable-diffusion.cpp $backend backend from source..."
   local BUILD_DIR="/tmp/uais-build-sd"
@@ -298,12 +319,55 @@ build_sd_from_source() {
   local build_subdir="build-$backend"
   rm -rf "$build_subdir" && mkdir "$build_subdir" && cd "$build_subdir"
   
-  local cmake_flags="-DSD_BUILD_SHARED_LIBS=ON -DCMAKE_BUILD_TYPE=Release"
+  local cmake_flags="-DSD_BUILD_SHARED_LIBS=ON -DCMAKE_BUILD_TYPE=Release -DSD_SERVER_BUILD_FRONTEND=OFF"
   if [[ "$backend" == "vulkan" ]]; then
     cmake_flags="$cmake_flags -DSD_VULKAN=ON"
   fi
+
+  # Pin ISA to this machine. Prebuilt Ubuntu builds and -march=native copies from
+  # newer hosts crash with SIGILL (Illegal instruction) on CPUs without AVX2
+  # (e.g. Sandy Bridge i7-2635QM has AVX only).
+  if [[ "$PLATFORM" == "Linux" && ( "$ARCH" == "x86_64" || "$ARCH" == "amd64" ) ]]; then
+    local cpuflags
+    cpuflags="$(grep -m1 -E '^flags' /proc/cpuinfo 2>/dev/null || true)"
+    cmake_flags="$cmake_flags -DGGML_NATIVE=OFF"
+    if echo "$cpuflags" | grep -qw avx; then
+      cmake_flags="$cmake_flags -DGGML_AVX=ON"
+    else
+      cmake_flags="$cmake_flags -DGGML_AVX=OFF"
+    fi
+    if echo "$cpuflags" | grep -qw avx2; then
+      cmake_flags="$cmake_flags -DGGML_AVX2=ON"
+    else
+      print_warn "CPU lacks AVX2 — building with AVX2/FMA/BMI2/F16C disabled (prevents SIGILL)."
+      cmake_flags="$cmake_flags -DGGML_AVX2=OFF -DGGML_FMA=OFF -DGGML_BMI2=OFF -DGGML_F16C=OFF"
+    fi
+    if echo "$cpuflags" | grep -qw avx2; then
+      if echo "$cpuflags" | grep -qw fma; then
+        cmake_flags="$cmake_flags -DGGML_FMA=ON"
+      else
+        cmake_flags="$cmake_flags -DGGML_FMA=OFF"
+      fi
+      if echo "$cpuflags" | grep -qw bmi2; then
+        cmake_flags="$cmake_flags -DGGML_BMI2=ON"
+      else
+        cmake_flags="$cmake_flags -DGGML_BMI2=OFF"
+      fi
+      if echo "$cpuflags" | grep -qw f16c; then
+        cmake_flags="$cmake_flags -DGGML_F16C=ON"
+      else
+        cmake_flags="$cmake_flags -DGGML_F16C=OFF"
+      fi
+    fi
+  elif [[ "$PLATFORM" == "Darwin" && "$ARCH" == "x86_64" ]]; then
+    if ! sysctl -a 2>/dev/null | grep machdep.cpu.features | grep -q AVX2; then
+      print_warn "CPU lacks AVX2 — building with AVX2/FMA disabled (prevents SIGILL)."
+      cmake_flags="$cmake_flags -DGGML_NATIVE=OFF -DGGML_AVX2=OFF -DGGML_FMA=OFF -DGGML_BMI2=OFF -DGGML_F16C=OFF"
+    fi
+  fi
   
   print_info "Running cmake for $backend backend..."
+  print_info "cmake flags: $cmake_flags"
   if cmake .. $cmake_flags && cmake --build . --config Release -j"$JOBS"; then
     mkdir -p "$dest_dir"
     if [[ -f bin/sd-server ]]; then
@@ -389,10 +453,18 @@ TOTAL_STEPS=7
 # ── Step 1: Portable Node.js ────────────────────────────────────────────────
 print_step 1 $TOTAL_STEPS "Setting up portable Node.js ($NODE_DIR/)"
 
-if [[ -x "$NODE_BIN" && -x "$NPM_BIN" ]]; then
+npm_works() {
+  [[ -x "$NODE_BIN" && -x "$NPM_BIN" ]] || return 1
+  "$NPM_BIN" --version >/dev/null 2>&1
+}
+
+if npm_works; then
   VERSION=$("$NODE_BIN" --version)
   print_ok "Portable Node.js already ready: $VERSION"
 else
+  if [[ -x "$NPM_BIN" ]] && ! "$NPM_BIN" --version >/dev/null 2>&1; then
+    print_warn "Existing portable npm is broken (missing lib/node_modules/npm). Reinstalling portable Node.js..."
+  fi
   mkdir -p "$TOOLS_DIR"
   NODE_TAR_PATH="$TOOLS_DIR/$NODE_TARBALL"
 
@@ -434,7 +506,7 @@ EOF
     print_ok "Created shell wrappers."
   fi
 
-  if [[ ! -x "$NODE_BIN" || ! -x "$NPM_BIN" ]]; then
+  if [[ ! -x "$NODE_BIN" || ! -x "$NPM_BIN" ]] || ! npm_works; then
     print_fail "Portable Node.js install is incomplete."
     exit 1
   fi
@@ -495,9 +567,58 @@ else
 
 # CPU backend (always)
 CPU_BACKEND_DIR="$BACKEND_DIR/cpu"
+
+# Returns 0 if the existing CPU server binary dies with SIGILL (wrong ISA).
+sd_cpu_binary_sigills() {
+  local bin="$1"
+  [[ -x "$bin" ]] || return 1
+  local libdir
+  libdir="$(dirname "$bin")"
+  # ggml_cpu_init runs as soon as a model path is accepted — dummy path is enough.
+  set +e
+  local out ec
+  out="$(
+    LD_LIBRARY_PATH="$libdir${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
+      timeout 5 "$bin" -m /tmp/uais-sd-isa-probe.safetensors \
+      --listen-ip 127.0.0.1 --listen-port 0 2>&1
+  )"
+  ec=$?
+  set -e
+  # 132 = 128 + SIGILL; 4 sometimes reported directly
+  if [[ $ec -eq 132 || $ec -eq 4 ]]; then
+    return 0
+  fi
+  if echo "$out" | grep -qi 'illegal instruction'; then
+    return 0
+  fi
+  return 1
+}
+
+NEED_SD_CPU_BUILD=0
 if [[ ! -f "$CPU_BACKEND_DIR/sd-cpu" || ! -f "$CPU_BACKEND_DIR/sd-server-cpu" ]]; then
-  if [[ "${UAIS_FORCE_COMPILE:-0}" == "1" ]]; then
-    build_sd_from_source cpu "$CPU_BACKEND_DIR" "sd-cpu" "sd-server-cpu"
+  NEED_SD_CPU_BUILD=1
+elif [[ "${UAIS_FORCE_COMPILE:-0}" == "1" ]]; then
+  NEED_SD_CPU_BUILD=1
+elif [[ "$PLATFORM" == "Linux" ]] && sd_cpu_binary_sigills "$CPU_BACKEND_DIR/sd-server-cpu"; then
+  print_warn "Existing CPU backend crashes with SIGILL (binary built for a newer CPU ISA)."
+  NEED_SD_CPU_BUILD=1
+  export UAIS_FORCE_COMPILE=1
+fi
+
+if [[ $NEED_SD_CPU_BUILD -eq 1 ]]; then
+  if [[ "${UAIS_FORCE_COMPILE:-0}" == "1" ]] || \
+     { [[ "$PLATFORM" == "Linux" && ( "$ARCH" == "x86_64" || "$ARCH" == "amd64" ) ]] \
+       && ! grep -qw avx2 /proc/cpuinfo 2>/dev/null; }; then
+    if command -v gcc >/dev/null 2>&1 && command -v g++ >/dev/null 2>&1 \
+       && command -v cmake >/dev/null 2>&1 && command -v make >/dev/null 2>&1 \
+       && command -v git >/dev/null 2>&1; then
+      print_warn "Building stable-diffusion.cpp CPU backend from source for this CPU..."
+      build_sd_from_source cpu "$CPU_BACKEND_DIR" "sd-cpu" "sd-server-cpu"
+    else
+      print_fail "CPU backend needs a local rebuild (SIGILL/no AVX2) but build tools are missing."
+      print_fail "Install: build-essential cmake git  — then re-run setup."
+      exit 1
+    fi
   else
     mkdir -p "$CPU_BACKEND_DIR"
     CPU_ZIP="$TOOLS_DIR/sd-cpu.zip"
@@ -507,6 +628,17 @@ if [[ ! -f "$CPU_BACKEND_DIR/sd-cpu" || ! -f "$CPU_BACKEND_DIR/sd-server-cpu" ]]
     copy_binaries_from_extracted "$CPU_BACKEND_DIR/extracted" "$CPU_BACKEND_DIR" "sd-cpu" "sd-server-cpu"
     rm -rf "$CPU_BACKEND_DIR/extracted"
     print_ok "CPU backend installed."
+    if sd_cpu_binary_sigills "$CPU_BACKEND_DIR/sd-server-cpu"; then
+      print_warn "Downloaded prebuilt CPU backend SIGILLs on this machine; compiling from source..."
+      if command -v gcc >/dev/null 2>&1 && command -v g++ >/dev/null 2>&1 \
+         && command -v cmake >/dev/null 2>&1 && command -v make >/dev/null 2>&1 \
+         && command -v git >/dev/null 2>&1; then
+        build_sd_from_source cpu "$CPU_BACKEND_DIR" "sd-cpu" "sd-server-cpu"
+      else
+        print_fail "Prebuilt backend is incompatible and build tools are missing (need build-essential cmake git)."
+        exit 1
+      fi
+    fi
   fi
 else
   print_ok "CPU backend already ready."

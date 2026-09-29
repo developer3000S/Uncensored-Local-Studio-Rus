@@ -59,6 +59,8 @@ export function normalizeModel(model) {
     backendType: model?.backendType || "",
     resolution: model?.resolution || "",
     isProjector: Boolean(model?.isProjector),
+    isEmbedding: Boolean(model?.isEmbedding),
+    loadFailed: Boolean(model?.loadFailed),
   };
 }
 

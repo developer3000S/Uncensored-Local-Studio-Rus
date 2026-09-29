@@ -66,11 +66,58 @@ if [ "$PLATFORM" = "Darwin" ]; then
     exit 0
 fi
 
+# Detect x86_64 CPU features so we never emit AVX2/FMA on older CPUs (e.g. Sandy Bridge).
+# Prebuilt/native builds from newer hosts cause SIGILL (Illegal instruction) at ggml_cpu_init.
+cpu_cmake_isa_flags() {
+    local flags=""
+    if [ "$(uname -m)" != "x86_64" ] && [ "$(uname -m)" != "amd64" ]; then
+        echo "$flags"
+        return 0
+    fi
+    local cpuflags=""
+    if [ -r /proc/cpuinfo ]; then
+        cpuflags="$(grep -m1 -E '^flags' /proc/cpuinfo 2>/dev/null || true)"
+    fi
+    # Always disable native auto-detection when we pin ISA flags for portability.
+    flags="-DGGML_NATIVE=OFF"
+    if echo "$cpuflags" | grep -qw avx; then
+        flags="$flags -DGGML_AVX=ON"
+    else
+        flags="$flags -DGGML_AVX=OFF"
+    fi
+    if echo "$cpuflags" | grep -qw avx2; then
+        flags="$flags -DGGML_AVX2=ON"
+    else
+        echo "  >> CPU lacks AVX2; building with AVX2/FMA/BMI2/F16C disabled (prevents SIGILL)."
+        flags="$flags -DGGML_AVX2=OFF -DGGML_FMA=OFF -DGGML_BMI2=OFF -DGGML_F16C=OFF"
+        echo "$flags"
+        return 0
+    fi
+    if echo "$cpuflags" | grep -qw fma; then
+        flags="$flags -DGGML_FMA=ON"
+    else
+        flags="$flags -DGGML_FMA=OFF"
+    fi
+    if echo "$cpuflags" | grep -qw bmi2; then
+        flags="$flags -DGGML_BMI2=ON"
+    else
+        flags="$flags -DGGML_BMI2=OFF"
+    fi
+    if echo "$cpuflags" | grep -qw f16c; then
+        flags="$flags -DGGML_F16C=ON"
+    else
+        flags="$flags -DGGML_F16C=OFF"
+    fi
+    echo "$flags"
+}
+
+ISA_FLAGS="$(cpu_cmake_isa_flags)"
+
 # 2. Build CPU Backend
 echo ""
 echo "=== Building CPU Backend ==="
 rm -rf build-cpu && mkdir build-cpu && cd build-cpu
-cmake .. -DSD_BUILD_SHARED_LIBS=ON -DCMAKE_BUILD_TYPE=Release -DSD_SERVER_BUILD_FRONTEND=OFF
+cmake .. -DSD_BUILD_SHARED_LIBS=ON -DCMAKE_BUILD_TYPE=Release -DSD_SERVER_BUILD_FRONTEND=OFF $ISA_FLAGS
 cmake --build . --config Release -j"$JOBS"
 
 echo "Copying CPU binaries..."
@@ -105,7 +152,7 @@ cd "$BUILD_DIR"
 echo ""
 echo "=== Building Vulkan Backend ==="
 if rm -rf build-vulkan && mkdir build-vulkan && cd build-vulkan && \
-   cmake .. -DSD_VULKAN=ON -DSD_BUILD_SHARED_LIBS=ON -DCMAKE_BUILD_TYPE=Release -DSD_SERVER_BUILD_FRONTEND=OFF && \
+   cmake .. -DSD_VULKAN=ON -DSD_BUILD_SHARED_LIBS=ON -DCMAKE_BUILD_TYPE=Release -DSD_SERVER_BUILD_FRONTEND=OFF $ISA_FLAGS && \
    cmake --build . --config Release -j"$JOBS"; then
 
     echo "Copying Vulkan binaries..."
