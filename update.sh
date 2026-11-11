@@ -34,7 +34,8 @@ git push origin main --no-thin
 # 4. Rebuild frontend
 echo "[4/4] Rebuild frontend ..."
 cd app/frontend
-npm install --no-bin-links
+# npm install --no-bin-links
+# npm audit fix --force
 mkdir -p node_modules/.bin
 # Create wrapper scripts for binaries (exfat doesn't support symlinks)
 cat > node_modules/.bin/vite << 'WRAPPER'
@@ -49,6 +50,7 @@ WRAPPER
 chmod +x node_modules/.bin/tauri
 npm run build
 cd ../..
+./scripts/rebuild.sh 
 
 if [ $? -eq 0 ]; then
     echo "--- Success: Repository updated! ---"
