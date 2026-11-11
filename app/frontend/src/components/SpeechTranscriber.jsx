@@ -365,7 +365,7 @@ export default function SpeechTranscriber({
       <div className="workspace-title-section">
         <h2 className="workspace-title">Распознавание речи</h2>
         <p className="workspace-subtitle">
-          Запишите звук с микрофона или загрузите WAV, затем расшифруйте локально с помощью whisper.cpp.
+          Запишите звук с микрофона или загрузите WAV, затем расшифруйте локально с помощью OpenAI Whisper.
         </p>
       </div>
 

@@ -49,7 +49,7 @@
 It unifies four major local AI capabilities into one high-performance desktop interface:
 1. **🎨 Image Generation (Stable Diffusion):** Generate and edit high-quality images offline using `.safetensors`, `.gguf`, or `.ckpt` model weights.
 2. **💬 Text Chat (LLMs):** Converse privately with open-source language models (GGUF format) powered by official, high-performance `llama.cpp` backends.
-3. **🎙️ Speech-to-Text (Whisper):** Transcribe voice recordings and speech to text in real-time with an integrated `whisper.cpp` engine.
+3. **🎙️ Speech-to-Text (Whisper):** Transcribe voice recordings and speech to text in real-time with an integrated OpenAI Whisper (PyTorch) worker.
 4. **🗣️ Text-to-Speech (TTS):** Convert text outputs into natural voice. Two engines are supported:
    - **Kokoro‑82M ONNX** – English voices (Heart, Bella, Michael, Emma, George, etc.).
    - **Qwen3‑TTS 1.7B ONNX** – **Russian voices** with zero‑shot voice cloning: Anna, Elena, Olga (female), Alexei, Dmitry, Ivan (male).

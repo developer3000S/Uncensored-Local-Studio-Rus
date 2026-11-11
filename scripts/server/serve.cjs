@@ -2867,11 +2867,6 @@ function runExclusiveSpeechOperation(operation) {
 }
 
 async function startSpeech(settings = {}) {
-  const backendPreference = normalizeSpeechBackendPreference(settings.backendPreference || speechSettings.backendPreference);
-  const backend = getSpeechBackend(backendPreference);
-  if (!backend.cli) {
-    throw new Error(`${backend.label || "Selected"} whisper.cpp backend is not installed. Run setup or copy a compatible binary to ${backend.pathHint || "app/speech-backend"}.`);
-  }
   const model = resolveSpeechModel(settings.model);
   PORT_SPEECH = await findAvailableSpeechPort();
   speechError = null;
@@ -2881,9 +2876,9 @@ async function startSpeech(settings = {}) {
     model: model.filename,
     language: settings.language || speechSettings.language || "auto",
     threads: Math.max(1, Math.min(32, Number(settings.threads) || speechSettings.threads || 4)),
-    backendPreference,
-    backendBinary: path.basename(backend.cli),
-    backendMode: backend.mode,
+    backendPreference: settings.backendPreference || speechSettings.backendPreference || "python",
+    backendBinary: "whisper-worker.py",
+    backendMode: "OpenAI Whisper (PyTorch)",
   };
 }
 
@@ -2971,19 +2966,12 @@ function transcribeWavBuffer(buffer, options = {}) {
       reject(new Error("Speech transcription currently accepts WAV audio only."));
       return;
     }
-    const backendPreference = normalizeSpeechBackendPreference(options.backendPreference || speechSettings.backendPreference);
-    const backend = getSpeechBackend(backendPreference);
-    if (!backend.cli) {
-      reject(new Error(`${backend.label || "Selected"} whisper.cpp CLI backend is not installed.`));
-      return;
-    }
     const model = resolveSpeechModel(options.model || speechSettings.model);
     const language = String(options.language || speechSettings.language || "auto");
     const sourceFilename = safeOutputName(options.filename || "recording.wav") || "recording.wav";
     const stamp = new Date().toISOString().replace(/[:.]/g, "-");
     const tempBase = path.join(TRANSCRIPTIONS, `.speech-${stamp}-${sourceFilename.replace(/\.[^.]+$/, "")}`);
     const wavPath = `${tempBase}.wav`;
-    const outBase = `${tempBase}-out`;
     fs.writeFileSync(wavPath, buffer);
 
     speechTranscriptionState = {
@@ -2994,79 +2982,67 @@ function transcribeWavBuffer(buffer, options = {}) {
       filename: sourceFilename,
     };
 
-    const args = [
-      "-m", model.path,
-      "-f", wavPath,
-      "-otxt",
-      "-oj",
-      "-of", outBase,
-      "-t", String(Math.max(1, Math.min(32, Number(options.threads) || speechSettings.threads || 4))),
-    ];
-    if (language && language !== "auto") {
-      args.push("-l", language);
-    } else {
-      args.push("-l", "auto");
-    }
-    if (options.translate) {
-      args.push("-tr");
-    }
-
     const startedAt = Date.now();
-    const backendDir = path.dirname(backend.cli);
-    fixMissingSharedLibraries(backendDir);
-    console.log("  [speech] Starting:", backend.cli, args.join(" "));
-    const proc = spawn(backend.cli, args, {
-      stdio: "pipe",
-      windowsHide: true,
+    const payload = {
+      audio_path: wavPath,
+      model: model.filename,
+      language,
+      translate: options.translate || false,
+    };
+
+    const proc = spawn("python3", [path.join(ROOT, "scripts", "workers", "whisper-worker.py")], {
+      cwd: ROOT,
+      stdio: ["pipe", "pipe", "pipe"],
       env: {
         ...process.env,
-        ...(osPlatform === "win32" ? { PATH: path.dirname(backend.cli) + (process.env.PATH ? `;${process.env.PATH}` : "") } : {}),
-        ...(osPlatform === "linux" ? { LD_LIBRARY_PATH: path.dirname(backend.cli) + (process.env.LD_LIBRARY_PATH ? `:${process.env.LD_LIBRARY_PATH}` : "") } : {}),
-        ...(osPlatform === "darwin" ? { DYLD_LIBRARY_PATH: path.dirname(backend.cli) + (process.env.DYLD_LIBRARY_PATH ? `:${process.env.DYLD_LIBRARY_PATH}` : "") } : {}),
+        WHISPER_MODEL_CACHE: path.join(ROOT, "app", "speech-models", ".cache"),
       },
     });
     let stdout = "";
     let stderr = "";
-    proc.stdout.on("data", (data) => {
-      stdout += data.toString();
-      process.stdout.write("  [speech] " + data.toString());
-    });
+    proc.stdout.on("data", (data) => { stdout += data.toString(); });
     proc.stderr.on("data", (data) => {
       stderr += data.toString();
       process.stderr.write("  [speech-err] " + data.toString());
+    });
+    proc.on("error", (err) => {
+      try { fs.unlinkSync(wavPath); } catch (_) {}
+      speechTranscriptionState = { active: false, phase: "Failed", progress: 0, model: model.filename, filename: sourceFilename };
+      reject(err);
     });
     proc.on("exit", (code) => {
       try { fs.unlinkSync(wavPath); } catch (_) {}
       speechTranscriptionState = { active: false, phase: code === 0 ? "Complete" : "Failed", progress: code === 0 ? 100 : 0, model: model.filename, filename: sourceFilename };
       if (code !== 0) {
-        const message = (stderr || stdout || `whisper.cpp exited with code ${code}`).trim().slice(-1200);
+        const message = (stderr || `Whisper worker exited with code ${code}`).trim().slice(-1200);
         speechError = message;
         reject(new Error(message));
         return;
       }
-      const txtPath = `${outBase}.txt`;
-      const jsonPath = `${outBase}.json`;
-      const text = fs.existsSync(txtPath) ? fs.readFileSync(txtPath, "utf8").trim() : stdout.trim();
-      let raw = null;
       try {
-        raw = fs.existsSync(jsonPath) ? JSON.parse(fs.readFileSync(jsonPath, "utf8")) : null;
-      } catch (_) {}
-      try { fs.unlinkSync(txtPath); } catch (_) {}
-      try { fs.unlinkSync(jsonPath); } catch (_) {}
-      const saved = saveTranscript({
-        text,
-        model: model.filename,
-        modelName: model.name,
-        language,
-        backend: backend.key,
-        backendMode: backend.mode,
-        sourceFilename,
-        durationMs: Date.now() - startedAt,
-        raw,
-      });
-      speechError = null;
-      resolve(saved);
+        const result = JSON.parse(stdout.trim() || "{}");
+        if (!result.ok) {
+          throw new Error(result.error || "Whisper worker failed.");
+        }
+        const saved = saveTranscript({
+          text: result.text || "",
+          model: model.filename,
+          modelName: model.name,
+          language: result.language || language,
+          backend: "python-whisper",
+          backendMode: "OpenAI Whisper (PyTorch)",
+          sourceFilename,
+          durationMs: Date.now() - startedAt,
+          raw: result.segments || null,
+        });
+        speechError = null;
+        resolve(saved);
+      } catch (err) {
+        speechError = err.message || String(err);
+        reject(err);
+      }
     });
+    proc.stdin.end(JSON.stringify(payload));
   });
 }
 
@@ -6992,8 +6968,8 @@ const server = http.createServer(async (req, res) => {
       running: speechReady,
       port: PORT_SPEECH,
       preferredPort: PREFERRED_SPEECH_PORT,
-      backendInstalled: Boolean(backend.cli),
-      backendPath: backend.cli || "",
+      backendInstalled: true,
+      backendPath: "whisper-worker.py",
       serverPath: backend.server || "",
       backendMode: backend.mode,
       backendPreference: backend.preference,
