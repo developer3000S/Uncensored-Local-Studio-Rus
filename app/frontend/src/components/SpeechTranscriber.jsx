@@ -133,7 +133,7 @@ function formatTranscriptText(transcription, showTimestamps) {
 
 export default function SpeechTranscriber({
   showAlert,
-  showConfirm,
+  _showConfirm,
   selectedTranscript,
   onTranscriptionsChanged,
   speechSettings,
@@ -169,7 +169,7 @@ export default function SpeechTranscriber({
     status.settings?.model === selectedModel &&
     (status.settings?.backendPreference || "auto") === backendPreference;
 
-  const isEnglishOnly = useMemo(() => {
+  const _isEnglishOnly = useMemo(() => {
     if (!selectedModel) return false;
     const model = models.find((m) => m.filename === selectedModel);
     return model?.language === "English" || selectedModel.toLowerCase().includes(".en");
@@ -381,7 +381,7 @@ export default function SpeechTranscriber({
 
           <label className="speech-label">
             Модель Whisper
-            <select className="m3-input" value={selectedModel} onChange={(event) => setSelectedModel(event.target.value)}>
+            <select name="speechtranscriber-384" className="m3-input" value={selectedModel} onChange={(event) => setSelectedModel(event.target.value)}>
               {installedModels.length === 0 && <option value="">Нет загруженных моделей речи</option>}
               {installedModels.map((model) => (
                 <option key={model.id || model.filename} value={model.filename}>
@@ -394,7 +394,7 @@ export default function SpeechTranscriber({
           <div className="speech-controls-row">
             <label className="speech-label">
               Бэкенд
-              <select className="m3-input" value={backendPreference} onChange={(event) => setBackendPreference(event.target.value)}>
+              <select name="speechtranscriber-397" className="m3-input" value={backendPreference} onChange={(event) => setBackendPreference(event.target.value)}>
                 <option value="auto">Авто (GPU, если установлен)</option>
                 {(status.backends || []).map((backend) => (
                   <option key={backend.key} value={backend.key}>
@@ -405,13 +405,13 @@ export default function SpeechTranscriber({
             </label>
             <label className="speech-label">
               Язык
-              <select className="m3-input" value={language} onChange={(event) => setLanguage(event.target.value)}>
+              <select name="speechtranscriber-408" className="m3-input" value={language} onChange={(event) => setLanguage(event.target.value)}>
                 {LANGUAGE_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
               </select>
             </label>
             <label className="speech-label">
               Потоки
-              <input
+              <input name="speechtranscriber-414"
                 className="m3-input"
                 type="number"
                 min="1"
@@ -423,7 +423,7 @@ export default function SpeechTranscriber({
           </div>
           <div style={{ marginTop: "10px", paddingLeft: "2px" }}>
             <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "0.82rem", cursor: "pointer", color: "var(--md-sys-color-on-surface)" }}>
-              <input
+              <input name="speechtranscriber-426"
                 type="checkbox"
                 checked={translate}
                 onChange={(event) => setSpeechSettings((prev) => ({ ...prev, translate: event.target.checked }))}
@@ -486,7 +486,7 @@ export default function SpeechTranscriber({
             <label className="m3-btn m3-btn-outlined">
               <Upload size={14} />
               <span>Загрузить WAV</span>
-              <input type="file" accept=".wav,audio/wav" onChange={handleUploadAudio} hidden />
+              <input name="speechtranscriber-489" type="file" accept=".wav,audio/wav" onChange={handleUploadAudio} hidden />
             </label>
             {audioBlob && (
               <button className="m3-btn m3-btn-error" onClick={clearCurrentAudio} disabled={isTranscribing || isRecording}>
@@ -522,7 +522,7 @@ export default function SpeechTranscriber({
           <h3>Расшифровка</h3>
           <div className="speech-button-row">
             <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "0.78rem", cursor: "pointer", userSelect: "none", color: "var(--md-sys-color-on-surface-variant)", marginRight: "12px" }}>
-              <input
+              <input name="speechtranscriber-525"
                 type="checkbox"
                 checked={showTimestamps}
                 onChange={(e) => setShowTimestamps(e.target.checked)}
@@ -546,7 +546,7 @@ export default function SpeechTranscriber({
             )}
           </div>
         </div>
-        <textarea
+        <textarea name="speechtranscriber-549"
           className="m3-textarea speech-result-textarea"
           value={resultText}
           onChange={(event) => setResultText(event.target.value)}

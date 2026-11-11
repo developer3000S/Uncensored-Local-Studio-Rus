@@ -114,7 +114,7 @@ function TextChat({
   setActiveModel, 
   setServerRunning,
   conversations,
-  setConversations,
+  _setConversations,
   activeConversationId,
   setActiveConversationId,
   showHistory,
@@ -135,7 +135,7 @@ function TextChat({
   const [input, setInput] = useState("");
   const [isBusy, setIsBusy] = useState(false);
   const [useWebSearch, setUseWebSearch] = useState(false);
-  const [webTimeFilter, setWebTimeFilter] = useState("any");
+  const [webTimeFilter, _setWebTimeFilter] = useState("any");
   const [loadingModel, setLoadingModel] = useState(null);
   const [tokenUsage, setTokenUsage] = useState({
     prompt_tokens: 0,
@@ -192,7 +192,7 @@ function TextChat({
   const tokenBufferRef = useRef(null);
   const rafRef = useRef(null);
   // Debounced stats: only update stats pill every 250ms
-  const statsDebounceRef = useRef(null);
+  const _statsDebounceRef = useRef(null);
 
   const [attachments, setAttachments] = useState([]);
   const fileInputRef = useRef(null);
@@ -1191,7 +1191,7 @@ function TextChat({
           {/* Input container with vertical layout */}
           <div className="chat-composer-inner">
             <div className="chat-composer-textarea-container">
-              <textarea
+              <textarea name="textchat-1194"
                 ref={textareaRef}
                 className="chat-composer-textarea"
                 value={input}
@@ -1210,7 +1210,7 @@ function TextChat({
 
             <div className="chat-composer-toolbar">
               <div className="chat-composer-toolbar-left">
-                <input type="file" ref={fileInputRef} style={{ display: "none" }} multiple onChange={handleFileChange} />
+                <input name="textchat-1213" type="file" ref={fileInputRef} style={{ display: "none" }} multiple onChange={handleFileChange} />
                 <button
                   className="chat-composer-attach-btn"
                   onClick={() => fileInputRef.current?.click()}

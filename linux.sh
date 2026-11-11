@@ -5,8 +5,22 @@
 # Используйте --max-perf, чтобы при первом запуске включить загрузку ROCm backend на Linux.
 #
 
-
 set -euo pipefail
+
+# Detect if running in Docker
+RUNNING_IN_DOCKER="${RUNNING_IN_DOCKER:-}"
+if [[ -n "$RUNNING_IN_DOCKER" ]]; then
+  DOCKER_MODE=true
+  echo "DEBUG: RUNNING_IN_DOCKER = '$RUNNING_IN_DOCKER'"
+  NODE_DIR="/usr/local"
+else
+  DOCKER_MODE=false
+fi
+
+# Skip port management in Docker mode
+if [[ "$DOCKER_MODE" == "true" ]]; then
+  echo "DEBUG: Docker mode detected, skipping port management"
+fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 APP_DIR="$SCRIPT_DIR/app"
@@ -14,12 +28,69 @@ PLATFORM="$(uname -s)"
 
 if [[ "$PLATFORM" != "Linux" ]]; then
   echo "[ОШИБКА] Этот скрипт предназначен только для Linux. На macOS запустите ./mac.sh." >&2
-
   exit 1
 fi
 
-NODE_DIR="$APP_DIR/tools/node-linux"
-NODE_BIN="$NODE_DIR/bin/node"
+# В Docker контейнере APP_DIR становится /app/app, но студия монтируется в /app
+# Используем SCRIPT_DIR напрямую для корректного пути
+echo "DEBUG: SCRIPT_DIR = '$SCRIPT_DIR'"
+echo "DEBUG: APP_DIR = '$APP_DIR'"
+echo "DEBUG: DOCKER_MODE = '$DOCKER_MODE'"
+
+# В Docker-режиме используем Node.js из стандартного пути Docker-контейнера
+echo "DEBUG: PATH = '$PATH'"
+
+# Проверяем, доступен ли Node.js в PATH
+if command -v node &>/dev/null; then
+  NODE_BIN="$(command -v node)"
+  echo "DEBUG: Node.js found in PATH at '$NODE_BIN'"
+  echo "DEBUG: Using Node.js from PATH"
+else
+  echo "ERROR: Node.js not found in PATH"
+  echo "DEBUG: Trying to find node in /usr/local/bin and /usr/bin"
+  if [[ -x /usr/local/bin/node ]]; then
+    NODE_BIN="/usr/local/bin/node"
+  elif [[ -x /usr/bin/node ]]; then
+    NODE_BIN="/usr/bin/node"
+  else
+    echo "ERROR: Node.js not found in standard locations"
+    exit 1
+  fi
+  echo "DEBUG: Found Node.js at '$NODE_BIN'"
+fi
+
+# Устанавливаем NODE_DIR по умолчанию для Docker-режима
+if [[ "$DOCKER_MODE" == "true" ]]; then
+  NODE_DIR="/usr/local"
+  echo "DEBUG: Docker mode detected, setting NODE_DIR to default: $NODE_DIR"
+fi
+
+# В не-Docker режиме используем монтируемый Node.js
+if [[ "$DOCKER_MODE" != "true" && -d "$APP_DIR/tools/node-linux" ]]; then
+  NODE_DIR="$APP_DIR/tools/node-linux"
+  NODE_BIN="$NODE_DIR/bin/node"
+  echo "DEBUG: Using non-Docker NODE_DIR = '$NODE_DIR'"
+  echo "DEBUG: NODE_BIN = '$NODE_BIN'"
+fi
+
+# Проверяем, что NODE_DIR и NODE_BIN существуют и являются исполняемыми
+if [[ ! -d "$NODE_DIR" ]]; then
+  echo "ERROR: NODE_DIR not found at $NODE_DIR"
+  exit 1
+fi
+
+if [[ ! -x "$NODE_BIN" ]]; then
+  echo "ERROR: Node.js binary not found or not executable at $NODE_BIN"
+  echo "DEBUG: Listing contents of $NODE_DIR/bin:"
+  ls -la "$NODE_DIR/bin/" 2>/dev/null || echo "DEBUG: Cannot list bin directory"
+  exit 1
+fi
+
+# Проверяем, что NODE_BIN действительно является исполняемым файлом
+if [[ ! -x "$NODE_BIN" ]]; then
+  echo "ERROR: Node.js binary is not executable"
+  exit 1
+fi
 BACKEND_PATH="$APP_DIR/backend/linux/vulkan/sd-vulkan"
 CPU_BACKEND_PATH="$APP_DIR/backend/linux/cpu/sd-cpu"
 PLATFORM_LABEL="Linux"
@@ -34,7 +105,7 @@ if [[ -f "$SCRIPT_DIR/.env" ]]; then
     if [[ "$line" =~ ^[[:space:]]*# ]] || [[ -z "$line" ]]; then
       continue
     fi
-    if [[ "$line" == *"="* ]]; then
+    if [[ "$line" == *=* ]]; then
       key="${line%%=*}"
       value="${line#*=}"
       value="${value#\"}"
@@ -66,6 +137,10 @@ SETUP_OPENVINO=0
 
 is_port_in_use() {
   local port="$1"
+  if [[ "$DOCKER_MODE" == "true" ]]; then
+    # В Docker порты управляются внешним образом, считаем что свободны
+    return 1
+  fi
   if command -v lsof >/dev/null 2>&1; then
     lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1
     return
@@ -79,6 +154,13 @@ is_port_in_use() {
 
 kill_port_if_in_use() {
   local port="$1"
+  # Проверяем, что мы не в Docker-режиме перед освобождением портов
+  if [[ "$RUNNING_IN_DOCKER" == "1" ]]; then
+    return 0
+  fi
+  if [[ "$DOCKER_MODE" == "true" ]]; then
+    return 0
+  fi
   if is_port_in_use "$port"; then
     echo "  [ИНФО] Порт $port занят. Освобождаю его..."
     if command -v lsof >/dev/null 2>&1; then
@@ -90,9 +172,12 @@ kill_port_if_in_use() {
   fi
 }
 
-kill_port_if_in_use "$FRONTEND_PORT"
-kill_port_if_in_use "$BACKEND_PORT"
-kill_port_if_in_use "$LLM_PORT"
+# Проверяем, что мы не в Docker-режиме перед освобождением портов
+if [[ "$RUNNING_IN_DOCKER" != "1" ]]; then
+    kill_port_if_in_use "$FRONTEND_PORT"
+    kill_port_if_in_use "$BACKEND_PORT"
+    kill_port_if_in_use "$LLM_PORT"
+fi
 
 resolve_frontend_port() {
   local preferred="$1"
@@ -130,10 +215,10 @@ for arg in "$@"; do
     *)
       echo "[ОШИБКА] Неизвестный параметр: $arg" >&2
       echo "Использование: ./linux.sh [--max-perf] [--setup-openvino]" >&2
-
       exit 1
       ;;
   esac
+
 done
 
 if [[ $SETUP_OPENVINO -eq 1 ]]; then
@@ -169,16 +254,16 @@ if [ "$USE_SYMLINKS" = true ]; then
 else
   # Fallback: Filesystem does not support symlinks (e.g. FAT32/exFAT)
   echo "  >> Filesystem does not support symlinks. Using directory swapping fallback..."
-  
+
   if [[ -L "$FRONTEND_NODE_MODULES" || -f "$FRONTEND_NODE_MODULES" ]]; then
     rm -f "$FRONTEND_NODE_MODULES"
   fi
-  
+
   PREV_OS=""
   if [[ -f "$ACTIVE_OS_FILE" ]]; then
     PREV_OS=$(cat "$ACTIVE_OS_FILE")
   fi
-  
+
   if [[ -d "$FRONTEND_NODE_MODULES" && "$PREV_OS" != "linux" ]]; then
     if [[ -n "$PREV_OS" ]]; then
       echo "  >> Swapping out node_modules to node_modules_$PREV_OS..."
@@ -190,19 +275,18 @@ else
       mv "$FRONTEND_NODE_MODULES" "$APP_DIR/frontend/node_modules_windows"
     fi
   fi
-  
+
   if [[ -d "$LINUX_NODE_MODULES" && ! -d "$FRONTEND_NODE_MODULES" ]]; then
     echo "  >> Swapping in node_modules_linux..."
     mv "$LINUX_NODE_MODULES" "$FRONTEND_NODE_MODULES"
   elif [[ ! -d "$FRONTEND_NODE_MODULES" ]]; then
     mkdir -p "$FRONTEND_NODE_MODULES"
   fi
-  
+
   echo "linux" > "$ACTIVE_OS_FILE"
 fi
 
 # ── Проверка первого запуска ────────────────────────────────────────────
-
 
 if [[ ! -d "$NODE_DIR" ]]; then
   SETUP_MODE="First-Time Setup"
@@ -210,12 +294,10 @@ fi
 
 if [[ ! -x "$NODE_BIN" ]]; then
   SETUP_REASON="Не найден переносимый Node.js для Linux."
-
 fi
 
 if [[ ! -f "$DIST_INDEX" ]]; then
   SETUP_REASON="Отсутствует сборка фронтенда (build)."
-
 fi
 
 # At minimum we need CPU or Vulkan backend on Linux, and both CLI and server binaries must be executable
@@ -230,19 +312,15 @@ SPEECH_BACKEND_PATH="$APP_DIR/speech-backend/linux/cpu/whisper-cli"
 TTS_RUNTIME_PATH="$APP_DIR/tts-runtime/node_modules/kokoro-js"
 if [[ ! -x "$CPU_BACKEND_PATH" || ! -x "$CPU_SERVER_PATH" ]] && [[ ! -x "$BACKEND_PATH" || ! -x "$VULKAN_SERVER_PATH" ]]; then
   SETUP_REASON="Не найдены файлы бэкенда Linux или они недоступны для выполнения."
-
 fi
 if [[ ! -x "$LLM_CUDA_PATH" && ! -x "$LLM_ROCM_PATH" && ! -x "$LLM_SYCL_PATH" && ! -x "$LLM_VULKAN_PATH" && ! -x "$LLM_CPU_PATH" ]]; then
   SETUP_REASON="Отсутствует (или недоступен для выполнения) текстовый бэкенд llama.cpp для Linux."
-
 fi
 if [[ ! -x "$SPEECH_BACKEND_PATH" ]]; then
   SETUP_REASON="Отсутствует (или недоступен для выполнения) speech-бэкенд whisper.cpp для Linux."
-
 fi
 if [[ ! -d "$TTS_RUNTIME_PATH" ]]; then
   SETUP_REASON="Отсутствует runtime Kokoro для text-to-speech."
-
 fi
 
 if [[ -n "$SETUP_REASON" ]]; then
@@ -253,17 +331,14 @@ if [[ -n "$SETUP_REASON" ]]; then
   echo ""
   if [[ "$SETUP_MODE" == "First-Time Setup" ]]; then
     echo "  Похоже, это первый запуск на Linux. Выполняю настройку автоматически..."
-
   else
     echo "  Нужна быстрая проверка и восстановление перед запуском."
-
   fi
   echo "  Причина: $SETUP_REASON"
   echo "  Во время настройки модели не загружаются. Загрузите их или импортируйте в приложении."
 
   echo ""
   read -rp "  Нажмите Enter, чтобы продолжить, или Ctrl+C чтобы отменить."
-
 
   # Очищаю порты управляемого бэкенда перед настройкой.
   # Порт фронтенда трогать не нужно — лаунчер сам выберет свободный порт.
@@ -294,20 +369,27 @@ echo "   UNCENSORED AI STUDIO      |  Запуск..."
 echo "  ============================================================"
 echo ""
 
-REQUESTED_FRONTEND_PORT="$FRONTEND_PORT"
-FRONTEND_PORT="$(resolve_frontend_port "$REQUESTED_FRONTEND_PORT")"
-if [[ "$FRONTEND_PORT" != "$REQUESTED_FRONTEND_PORT" ]]; then
-  echo "  Порт фронтенда ${REQUESTED_FRONTEND_PORT} занят; используется ${FRONTEND_PORT} вместо этого."
+if [[ "$DOCKER_MODE" == "true" ]]; then
+  # В Docker порты управляются внешним образом, используем порт из окружения напрямую
+  FRONTEND_PORT="$FRONTEND_PORT"
+else
+  REQUESTED_FRONTEND_PORT="$FRONTEND_PORT"
+  FRONTEND_PORT="$(resolve_frontend_port "$REQUESTED_FRONTEND_PORT")"
+  if [[ "$FRONTEND_PORT" != "$REQUESTED_FRONTEND_PORT" ]]; then
+    echo "  Порт фронтенда ${REQUESTED_FRONTEND_PORT} занят; используется ${FRONTEND_PORT} вместо этого."
+  fi
 fi
-
 
   # Очищаю порты управляемого бэкенда
 
-if command -v lsof >/dev/null 2>&1; then
-  lsof -t -i:"${BACKEND_PORT}" -i:"${LLM_PORT}" | xargs kill -9 >/dev/null 2>&1 || true
-elif command -v fuser >/dev/null 2>&1; then
-  fuser -k "${BACKEND_PORT}/tcp" >/dev/null 2>&1 || true
-  fuser -k "${LLM_PORT}/tcp" >/dev/null 2>&1 || true
+# Проверяем, что мы не в Docker-режиме перед освобождением портов
+if [[ "$RUNNING_IN_DOCKER" != "1" ]]; then
+  if command -v lsof >/dev/null 2>&1; then
+    lsof -t -i:"${BACKEND_PORT}" -i:"${LLM_PORT}" | xargs kill -9 >/dev/null 2>&1 || true
+  elif command -v fuser >/dev/null 2>&1; then
+    fuser -k "${BACKEND_PORT}/tcp" >/dev/null 2>&1 || true
+    fuser -k "${LLM_PORT}/tcp" >/dev/null 2>&1 || true
+  fi
 fi
 
 # Запускаю сервер
@@ -318,7 +400,6 @@ export PATH="$NODE_DIR/bin:$PATH"
 export FRONTEND_PORT="$FRONTEND_PORT"
 
 # Запускаю сервер в фоне и сохраняю PID
-
 "$NODE_BIN" "$SERVE_SCRIPT" &
 SERVER_PID=$!
 
@@ -341,13 +422,10 @@ echo ""
 echo "  ============================================================"
 echo "   Запущено!"
 
-echo "   Web UI:     http://localhost:${FRONTEND_PORT}
-   GPU API:    Автовыбор приложением (стартует с ${BACKEND_PORT})
- 
-   Text API:   Запускается при загрузке модели GGUF (порт ${LLM_PORT})"
-
+echo "   Web UI:     http://localhost:${FRONTEND_PORT}"
+echo "   GPU API:    Автовыбор приложением (стартует с ${BACKEND_PORT})"
+echo "   Text API:   Запускается при загрузке модели GGUF (порт ${LLM_PORT})"
 echo "   Speech:     Управляется локально приложением"
-
 echo "   TTS:        Управляется локально приложением"
 
 echo ""
@@ -362,19 +440,17 @@ cleanup() {
   echo ""
   echo "  Останавливаю..."
 
-
   if kill -0 "$SERVER_PID" >/dev/null 2>&1; then
     kill -TERM "$SERVER_PID" >/dev/null 2>&1 || true
     sleep 1
     kill -KILL "$SERVER_PID" >/dev/null 2>&1 || true
   fi
   echo "  Готово. До свидания!"
-
+  
   exit 0
 }
 trap cleanup SIGINT SIGTERM
 
 # Держу скрипт активным
-
-wait "$SERVER_PID" || true
+wait $SERVER_PID
 cleanup

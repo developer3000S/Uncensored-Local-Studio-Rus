@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useLayoutEffect } from "react";
-import { Cpu, Plus, Trash2, Play, StopCircle, UploadCloud, MessageSquare, Settings, Database, Activity, FileText, Terminal, Loader2, ChevronDown, Bot, Send, Square, Paperclip, Globe2, X } from "lucide-react";
+import { Cpu, Plus, Trash2, Play, StopCircle, UploadCloud, MessageSquare, Settings, Database, Activity, FileText, Terminal, Loader2, ChevronDown, Send, Square, Paperclip, Globe2, X } from "lucide-react";
 import { streamAgentChat, getLlmStatus } from "../services/api";
 import { MarkdownRenderer } from "./TextChat";
 
@@ -128,12 +128,12 @@ export default function AgentsManager({ showAlert, showConfirm, selectedAgentIdF
   const [attachments, setAttachments] = useState([]);
   const [useWebSearch, setUseWebSearch] = useState(false);
   const [deepThinkEnabled, setDeepThinkEnabled] = useState(false);
-  const [webTimeFilter, setWebTimeFilter] = useState("any");
+  const [_webTimeFilter, _setWebTimeFilter] = useState("any");
   const composerFileInputRef = useRef(null);
 
-  const supportsVision = Boolean(status.ready && status.settings?.supportsVision);
+  const _supportsVision = Boolean(status.ready && status.settings?.supportsVision);
   const supportsThinking = Boolean(status.ready && status.settings?.supportsThinking);
-  const visionStatus = status.settings?.visionStatus || "Ввод изображений требует mmproj-файла проектора.";
+  const _visionStatus = status.settings?.visionStatus || "Ввод изображений требует mmproj-файла проектора.";
 
   const isImage = (file) => {
     return /\.(jpe?g|png|webp)$/i.test(file.name) || file.type.startsWith("image/");
@@ -630,9 +630,9 @@ export default function AgentsManager({ showAlert, showConfirm, selectedAgentIdF
     // Insert assistant placeholder for streaming
     setChatMessages(prev => [...prev, { role: "assistant", content: "", reasoning: "", thinkingDuration: 0, webSources: [] }]);
 
-    const requestStartedAt = performance.now();
+    const _requestStartedAt = performance.now();
     let streamedTokens = 0;
-    let firstTokenAt = null;
+    let _firstTokenAt = null;
     let thinkingStartedAt = null;
     let thinkingEndedAt = null;
     let thinkingDuration = 0;
@@ -640,13 +640,13 @@ export default function AgentsManager({ showAlert, showConfirm, selectedAgentIdF
     try {
       await streamAgentChat(selectedAgent.id, requestUserMessageContent, {
         useWeb: useWebSearch,
-        timeFilter: webTimeFilter,
+        timeFilter: _webTimeFilter,
         enableThinking: deepThinkEnabled,
         signal: controller.signal
       }, (token, fullText, reasoningToken, fullReasoning, webSources) => {
         const now = performance.now();
         if (streamedTokens === 0) {
-          firstTokenAt = now;
+          _firstTokenAt = now;
         }
         streamedTokens += 1;
 
@@ -798,8 +798,8 @@ export default function AgentsManager({ showAlert, showConfirm, selectedAgentIdF
           {activeSubTab === "settings" && (
             <div style={{ display: "flex", flexDirection: "column", gap: "20px", maxWidth: "800px" }}>
               <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                <label style={{ fontSize: "0.85rem", fontWeight: "600" }}>Имя агента</label>
-                <input 
+                <label htmlFor="agent-name" style={{ fontSize: "0.85rem", fontWeight: "600" }}>Имя агента</label>
+                <input id="agent-name" name="agentsmanager-802" 
                   type="text" 
                   value={name} 
                   onChange={e => setName(e.target.value)} 
@@ -809,8 +809,8 @@ export default function AgentsManager({ showAlert, showConfirm, selectedAgentIdF
               </div>
 
               <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                <label style={{ fontSize: "0.85rem", fontWeight: "600" }}>Описание</label>
-                <input 
+                <label htmlFor="agent-description" style={{ fontSize: "0.85rem", fontWeight: "600" }}>Описание</label>
+                <input id="agent-description" name="agentsmanager-813" 
                   type="text" 
                   value={description} 
                   onChange={e => setDescription(e.target.value)} 
@@ -820,8 +820,8 @@ export default function AgentsManager({ showAlert, showConfirm, selectedAgentIdF
               </div>
 
               <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                <label style={{ fontSize: "0.85rem", fontWeight: "600" }}>Системный промпт</label>
-                <textarea 
+                <label htmlFor="agent-system-prompt" style={{ fontSize: "0.85rem", fontWeight: "600" }}>Системный промпт</label>
+                <textarea id="agent-system-prompt" name="agentsmanager-824" 
                   value={systemPrompt} 
                   onChange={e => setSystemPrompt(e.target.value)} 
                   rows={8}
@@ -831,7 +831,7 @@ export default function AgentsManager({ showAlert, showConfirm, selectedAgentIdF
               </div>
 
               <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                <label style={{ fontSize: "0.85rem", fontWeight: "600" }}>Доступ к Базе Знаний (RAG)</label>
+                <div style={{ fontSize: "0.85rem", fontWeight: "600" }}>Доступ к Базе Знаний (RAG)</div>
                 <div style={{ display: "flex", gap: "16px", marginTop: "4px" }}>
                   <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "0.9rem" }}>
                     <input 
@@ -905,7 +905,7 @@ export default function AgentsManager({ showAlert, showConfirm, selectedAgentIdF
                     </>
                   )}
                 </button>
-                <input 
+                <input name="agentsmanager-908" 
                   type="file" 
                   ref={fileInputRef} 
                   onChange={handleFileUpload} 
@@ -955,7 +955,7 @@ export default function AgentsManager({ showAlert, showConfirm, selectedAgentIdF
               <div style={{ width: "320px", display: "flex", flexDirection: "column", gap: "16px" }}>
                 <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
                   <h4 style={{ margin: 0, fontWeight: "600" }}>Новая фоновая задача</h4>
-                  <textarea
+                  <textarea name="agentsmanager-958"
                     value={newTaskPrompt}
                     onChange={e => setNewTaskPrompt(e.target.value)}
                     placeholder="Напишите инструкцию или задачу для агента..."
@@ -1195,7 +1195,7 @@ export default function AgentsManager({ showAlert, showConfirm, selectedAgentIdF
               {/* Chat Input Bar */}
               <div className="chat-composer" style={{ borderTop: "1px solid var(--border-color)", background: "var(--md-sys-color-surface-container-low)" }}>
                 <div className="chat-composer-inner">
-                  <input 
+                  <input name="agentsmanager-1198" 
                     type="file" 
                     ref={composerFileInputRef} 
                     multiple 
@@ -1240,7 +1240,7 @@ export default function AgentsManager({ showAlert, showConfirm, selectedAgentIdF
                   )}
 
                   <div className="chat-composer-textarea-container">
-                    <textarea 
+                    <textarea name="agentsmanager-1243" 
                       ref={textareaRef}
                       className="chat-composer-textarea"
                       value={chatInput} 
@@ -1302,7 +1302,7 @@ export default function AgentsManager({ showAlert, showConfirm, selectedAgentIdF
                             userSelect: "none"
                           }}
                         >
-                          <input 
+                          <input name="agentsmanager-1305" 
                             type="checkbox"
                             checked={deepThinkEnabled}
                             onChange={(e) => setDeepThinkEnabled(e.target.checked)}

@@ -398,7 +398,7 @@ function ModelManager({
     return true;
   };
   
-  let visibleModelLibrary = [];
+  let visibleModelLibrary;
   if (activeModelType === "image") {
     visibleModelLibrary = [...MODEL_LIBRARY];
     if (openvinoSupported) {
@@ -531,6 +531,9 @@ function ModelManager({
   useEffect(() => {
     let cancelled = false;
     const updateBackendInfo = async () => {
+      // Skip polling if page is not visible to reduce unnecessary network requests
+      if (document.hidden) return;
+
       try {
         const [sdStatus, llmStatus, speechStatus, ttsStatus] = await Promise.all([
           getBackendStatus(),
@@ -1639,7 +1642,7 @@ function ModelManager({
         <div className="model-discovery-controls">
           <div className="model-search-box">
             <Search size={18} />
-            <input
+            <input name="modelmanager-1645"
               type="search"
               value={modelSearch}
               onChange={(event) => setModelSearch(event.target.value)}
@@ -1837,7 +1840,7 @@ function ModelManager({
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: "16px", marginTop: "16px" }}>
         <label className="import-box" style={{ margin: 0, height: "100%", justifyContent: "center" }}>
-          <input
+          <input name="modelmanager-1843"
             type="file"
             style={{ display: "none" }}
             accept={activeModelType === "image" ? ".safetensors,.ckpt" : activeModelType === "text" ? ".gguf" : activeModelType === "speech" ? ".bin" : ".json"}
@@ -1880,7 +1883,7 @@ function ModelManager({
             </div>
           ) : (
             <form onSubmit={handleUrlDownloadSubmit} style={{ display: "flex", gap: "8px" }}>
-              <input
+              <input name="modelmanager-1886"
                 type="text"
                 className="m3-input"
                 style={{ flex: 1, height: "40px" }}

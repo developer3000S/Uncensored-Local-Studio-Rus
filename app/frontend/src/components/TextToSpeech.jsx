@@ -183,7 +183,7 @@ export default function TextToSpeech({
 
           <label className="speech-label">
             Модель Kokoro
-            <select className="m3-input" value={selectedModel} onChange={(event) => setSelectedModel(event.target.value)}>
+            <select name="texttospeech-186" className="m3-input" value={selectedModel} onChange={(event) => setSelectedModel(event.target.value)}>
               {installedModels.length === 0 && <option value="">Нет загруженных моделей TTS</option>}
               {installedModels.map((model) => (
                 <option key={model.id || model.filename} value={model.filename}>
@@ -196,7 +196,7 @@ export default function TextToSpeech({
           <div className="speech-controls-row">
             <label className="speech-label">
               Голос
-              <select className="m3-input" value={selectedVoice} onChange={(event) => updateTtsSetting("voice", event.target.value)}>
+              <select name="texttospeech-199" className="m3-input" value={selectedVoice} onChange={(event) => updateTtsSetting("voice", event.target.value)}>
                 {voices.map((voice) => (
                   <option key={voice.id} value={voice.id}>
                     {voice.name} ({voice.gender}, {voice.language})
@@ -206,7 +206,7 @@ export default function TextToSpeech({
             </label>
             <label className="speech-label">
               Скорость
-              <input
+              <input name="texttospeech-209"
                 className="m3-input"
                 type="number"
                 min="0.5"
@@ -251,7 +251,7 @@ export default function TextToSpeech({
             <h3>Ввод</h3>
             <span className="status-chip">{text.trim().length} chars</span>
           </div>
-          <textarea
+          <textarea name="texttospeech-254"
             className="m3-input"
             value={text}
             onChange={(event) => setText(event.target.value)}
@@ -297,7 +297,7 @@ export default function TextToSpeech({
             <div className="text-progress">
               {output.voiceName || output.voice} &bull; {output.modelName || output.model} &bull; {new Date(output.createdAt).toLocaleString()}
             </div>
-            <textarea
+            <textarea name="texttospeech-300"
               className="m3-input"
               value={output.text || text}
               onChange={(event) => setOutput((prev) => ({ ...(prev || {}), text: event.target.value }))}

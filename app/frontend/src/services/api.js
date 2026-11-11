@@ -25,7 +25,9 @@ async function getBackendPort() {
         cachedBackendPort = port;
         return port;
       }
-    } catch (_) {}
+    } catch (_) {
+      // Corrupted/absent localStorage port entry; fall through to defaults.
+    }
   }
   if (cachedBackendPort) return cachedBackendPort;
   return 8080;
@@ -66,12 +68,17 @@ export function normalizeModel(model) {
 
 async function readJsonResponse(res, fallbackMessage = "The local server returned an invalid response.") {
   const text = await res.text();
-  let data = {};
+  let data;
   try {
     data = JSON.parse(text || "{}");
   } catch (_) {
     const looksLikeHtml = text.trim().startsWith("<!doctype") || text.trim().startsWith("<html");
-    throw new Error(looksLikeHtml ? "The local server is serving an older frontend/API. Restart the image generator." : fallbackMessage);
+    throw new Error(
+      looksLikeHtml
+        ? "The local server is serving an older frontend/API. Restart the image generator."
+        : fallbackMessage,
+      { cause: _ }
+    );
   }
 
   if (!res.ok || data.ok === false) {
@@ -168,7 +175,7 @@ export async function getTelemetry() {
       const stats = await invoke("get_telemetry");
       return stats;
     } catch (e) {
-      // Ignore and use fallback
+      // Ignore and use fallback below.
     }
   }
 
@@ -178,7 +185,9 @@ export async function getTelemetry() {
       if (res.ok) {
         return await res.json();
       }
-    } catch (_) {}
+    } catch (_) {
+      // Ignore and use fallback below.
+    }
   }
 
   return {
@@ -312,7 +321,9 @@ export async function stopServer() {
   }
   try {
     await fetch("/api/stop-backend", { method: "POST" });
-  } catch (_) {}
+  } catch (_) {
+    // Server may already be shutting down; the request failing is fine.
+  }
   return "Backend stopped";
 }
 
@@ -1029,20 +1040,24 @@ export async function generateImage(prompt, negativePrompt, constraints, activeM
       }
     } else {
       let errMsg = `Generation failed (HTTP ${response.status})`;
+      let errJson;
       try {
-        const errJson = await response.json();
+        errJson = await response.json();
         if (errJson?.detail || errJson?.error?.message) {
           errMsg = errJson.detail || errJson.error.message;
         }
-      } catch (_) {}
-      throw new Error(errMsg);
+      } catch (_) {
+        // Response body was not JSON; keep the generic HTTP error message.
+      }
+      throw new Error(errMsg, { cause: { response, errJson: typeof errJson !== "undefined" ? errJson : undefined } });
     }
   } catch (err) {
     if (err.name === "AbortError" || err.message.startsWith("Generation failed")) throw err;
     console.warn("Could not reach local server.", err);
     throw new Error(
       "The image generation server is not responding or crashed. " +
-      "Try restarting the backend from Model Manager, or check the terminal for a backend error."
+      "Try restarting the backend from Model Manager, or check the terminal for a backend error.",
+      { cause: err }
     );
   }
 }
@@ -1084,7 +1099,6 @@ export async function importModelFile(sourcePath, onProgress, signal) {
   console.log(`Web Mode: Simulating copying ${filename} to USB models folder`);
   
   const totalSteps = 40;
-  const start = Date.now();
 
   for (let i = 1; i <= totalSteps; i++) {
     if (signal?.aborted) {
@@ -1092,7 +1106,6 @@ export async function importModelFile(sourcePath, onProgress, signal) {
     }
     await new Promise((r) => setTimeout(r, 150)); // ~6 seconds copy total
     const progress = (i / totalSteps) * 100;
-    const elapsedSecs = (Date.now() - start) / 1000;
     const speed = 40 + Math.sin(i) * 5 + Math.random() * 2; // ~42 MB/s
     const eta = (totalSteps - i) * 0.15;
 
@@ -1162,7 +1175,9 @@ function uploadModelFileToEndpoint(file, endpoint, onProgress, signal) {
       let data = {};
       try {
         data = JSON.parse(xhr.responseText || "{}");
-      } catch (_) {}
+      } catch (_) {
+        // Non-JSON upload response; treated as success if HTTP status is OK.
+      }
 
       if (xhr.status >= 200 && xhr.status < 300 && data.ok !== false) {
         if (onProgress) {
@@ -1224,7 +1239,7 @@ export async function pingServer() {
   try {
     const response = await fetch(`${baseUrl}/v1/models`, { method: "GET" });
     return response.ok;
-  } catch (e) {
+  } catch {
     return false;
   }
 }
@@ -1233,7 +1248,7 @@ export async function pingServer() {
 export async function waitForServerReady(maxAttempts = 30) {
   const attempts = isTauri() || isLocalServerMode() ? maxAttempts : 3;
   for (let i = 0; i < attempts; i++) {
-    let ok = false;
+    let ok;
     if (isLocalServerMode()) {
       const status = await getBackendStatus();
       ok = Boolean(status.ready);

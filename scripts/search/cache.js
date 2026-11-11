@@ -28,7 +28,9 @@ function writeCache(cacheDir, key, value) {
     ensureDir(cacheDir);
     const file = path.join(cacheDir, `${keyFor(key)}.json`);
     fs.writeFileSync(file, JSON.stringify(value, null, 2), "utf8");
-  } catch (_) {}
+  } catch (_) {
+    // Best-effort cache write; ignore filesystem errors.
+  }
 }
 
 module.exports = {

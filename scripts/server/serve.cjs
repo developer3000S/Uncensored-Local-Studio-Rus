@@ -2040,7 +2040,10 @@ function readGgufArchitecture(filePath) {
 
 // Returns the byte offset just past a GGUF metadata value, or -1 on malformed data.
 function skipGgufValue(handle, offset, valueType) {
-  const TYPE_SIZES = { 0: 1, 1: 1, 2: 2, 3: 2, 4: 4, 5: 4, 6: 8, 7: 8, 8: null, 9: null, 10: 8, 11: 8, 12: 8 };
+  // GGUF metadata value types: UINT8/INT8 (0/1), UINT16/INT16 (2/3),
+  // UINT32/INT32 (4/5), FLOAT32 (6), BOOL (7), STRING (8), ARRAY (9),
+  // UINT64/INT64 (10/11), FLOAT64 (12).
+  const TYPE_SIZES = { 0: 1, 1: 1, 2: 2, 3: 2, 4: 4, 5: 4, 6: 4, 7: 1, 8: null, 9: null, 10: 8, 11: 8, 12: 8 };
   try {
     if (valueType === 8) { // string
       const lenBuf = Buffer.alloc(8);
@@ -2067,6 +2070,89 @@ function skipGgufValue(handle, offset, valueType) {
     return offset + size;
   } catch (_) {
     return -1;
+  }
+}
+
+// Reads `<arch>.context_length` from the GGUF metadata header.
+// This is the window the model was trained for — an upper bound on what the
+// engine can be told to load. Without it, auto-context picks a window purely
+// from available memory and can pick one far larger than the model supports.
+//
+// The walk is best-effort: if a value can't be parsed, the loop stops and
+// returns whatever was already collected rather than discarding it. The
+// context_length key tends to sit early in the metadata (right after the
+// general.* block), so a truncated walk still finds it in practice.
+function readGgufContextLength(filePath) {
+  let handle = null;
+  try {
+    handle = fs.openSync(filePath, "r");
+    const header = Buffer.alloc(24);
+    if (fs.readSync(handle, header, 0, 24, 0) !== 24) return 0;
+    if (header.toString("ascii", 0, 4) !== "GGUF") return 0;
+    const nKv = header.readBigUInt64LE(16);
+    let offset = 24;
+    let arch = "";
+    const intKeys = {};
+    for (let i = 0n; i < nKv; i += 1n) {
+      const lenBuf = Buffer.alloc(8);
+      if (fs.readSync(handle, lenBuf, 0, 8, offset) !== 8) break;
+      const keyLen = Number(lenBuf.readBigUInt64LE(0));
+      offset += 8;
+      if (keyLen <= 0 || keyLen > 4096) break;
+      const keyBuf = Buffer.alloc(keyLen);
+      if (fs.readSync(handle, keyBuf, 0, keyLen, offset) !== keyLen) break;
+      offset += keyLen;
+      const key = keyBuf.toString("utf8");
+      const typeBuf = Buffer.alloc(4);
+      if (fs.readSync(handle, typeBuf, 0, 4, offset) !== 4) break;
+      const valueType = typeBuf.readInt32LE(0);
+      offset += 4;
+
+      if (key === "general.architecture") {
+        if (valueType !== 8) break;
+        const strLenBuf = Buffer.alloc(8);
+        if (fs.readSync(handle, strLenBuf, 0, 8, offset) !== 8) break;
+        const strLen = Number(strLenBuf.readBigUInt64LE(0));
+        offset += 8;
+        if (strLen <= 0 || strLen > 4096) break;
+        const strBuf = Buffer.alloc(strLen);
+        if (fs.readSync(handle, strBuf, 0, strLen, offset) !== strLen) break;
+        offset += strLen;
+        arch = strBuf.toString("utf8");
+        continue;
+      }
+
+      if (valueType === 4 || valueType === 5) { // uint32 / int32
+        const valBuf = Buffer.alloc(4);
+        if (fs.readSync(handle, valBuf, 0, 4, offset) !== 4) break;
+        if (key.endsWith(".context_length")) {
+          intKeys[key] = valBuf.readUInt32LE(0);
+        } else if (key === "llama.context_length" && !(key in intKeys)) {
+          intKeys[key] = valBuf.readUInt32LE(0);
+        }
+        offset += 4;
+        continue;
+      }
+
+      offset = skipGgufValue(handle, offset, valueType);
+      if (offset < 0) break;
+
+      // `<arch>.context_length` sits right after the general.* block, while
+      // the tokenizer arrays that follow it hold tens of thousands of
+      // elements. Stopping once we have the answer keeps this a header scan
+      // instead of a full metadata walk.
+      if (arch && intKeys[`${arch}.context_length`]) break;
+    }
+
+    const wanted = arch ? `${arch}.context_length` : null;
+    const value = (wanted && intKeys[wanted]) || intKeys["llama.context_length"] || 0;
+    return value > 0 ? value : 0;
+  } catch (_) {
+    return 0;
+  } finally {
+    if (handle !== null) {
+      try { fs.closeSync(handle); } catch (_) { /* already closed */ }
+    }
   }
 }
 
@@ -4422,6 +4508,14 @@ async function startLlmWithBackend(settings = {}, backend) {
   if (!contextSize || contextSize <= 0) {
     const isGpu = backend.mode.includes("GPU") || backend.mode.includes("CUDA") || backend.mode.includes("Vulkan") || backend.mode.includes("Metal") || backend.mode.startsWith("Auto");
     contextSize = chooseAutoContext(filename, isGpu);
+
+    // The memory-based estimate can exceed what the model was trained for;
+    // the GGUF's declared context length is the hard ceiling.
+    const modelContext = readGgufContextLength(modelPath);
+    if (modelContext > 0 && contextSize > modelContext) {
+      console.log(`  [llm] Clamping auto context ${contextSize} -> ${modelContext} (GGUF context_length).`);
+      contextSize = modelContext;
+    }
     console.log(`  [llm] Auto-selected context size: ${contextSize} tokens based on memory limits.`);
   } else {
     contextSize = Math.max(512, Math.min(32768, contextSize));

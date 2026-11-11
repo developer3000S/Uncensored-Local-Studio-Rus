@@ -56,7 +56,9 @@ function extractDuckDuckGoUrl(rawHref) {
     const uddg = parsed.searchParams.get("uddg");
     if (uddg) return decodeURIComponent(uddg);
     if (parsed.protocol === "http:" || parsed.protocol === "https:") return parsed.toString();
-  } catch (_) {}
+  } catch (_) {
+    // Not a parseable URL; fall through to the empty-result path.
+  }
   return "";
 }
 

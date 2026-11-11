@@ -1,14 +1,13 @@
 import React, { memo, useEffect, useState, useCallback } from "react";
 import {
-  Crop, Sliders, Cpu, Info, MessageSquare, SlidersHorizontal, Zap,
+  Crop, Sliders, MessageSquare, SlidersHorizontal,
   ChevronDown, Image, Type, Settings2, Gauge, Brain, Sparkles,
-  Monitor, HardDrive, MemoryStick, Thermometer, Hash, Layers,
-  ChevronRight, Box, Wand2, Lightbulb, RotateCcw, Check, Palette, Volume2,
+  Monitor,
+  Check, Palette, Volume2,
   DownloadCloud, RefreshCw
 } from "lucide-react";
 import {
   stopServer,
-  formatBytes,
   getLlmBackends,
   getLlmStats,
   getLlmStatus,
@@ -38,7 +37,7 @@ const isSD15OrCustomModel = (modelName) => {
 };
 
 // ─── Collapsible Card Component ───
-function CollapsibleCard({ icon: Icon, title, subtitle, children, defaultExpanded = false, id, badge, badgeColor }) {
+function _CollapsibleCard({ icon: Icon, title, subtitle, children, defaultExpanded = false, id, badge, badgeColor }) {
   const [isExpanded, setIsExpanded] = useState(() => {
     const saved = localStorage.getItem(`settings_card_${id}`);
     return saved !== null ? saved === "true" : defaultExpanded;
@@ -97,7 +96,7 @@ function CollapsibleCard({ icon: Icon, title, subtitle, children, defaultExpande
 }
 
 // ─── Hardware Tier Badge Component ───
-function HardwareTierBadge({ specs }) {
+function _HardwareTierBadge({ specs }) {
   if (!specs?.tier) return null;
 
   const tierConfig = {
@@ -141,10 +140,9 @@ function HardwareTierBadge({ specs }) {
 // ─── Premium Toggle Component ───
 function PremiumToggle({ checked, onChange, label, description }) {
   return (
-    <label className="premium-toggle" style={{ cursor: "pointer" }}>
+    <div className="premium-toggle" style={{ cursor: "pointer" }} onClick={() => onChange(!checked)}>
       <div
         className={`premium-toggle-checkbox ${checked ? "checked" : ""}`}
-        onClick={() => onChange(!checked)}
         role="checkbox"
         aria-checked={checked}
       >
@@ -154,7 +152,7 @@ function PremiumToggle({ checked, onChange, label, description }) {
         <div className="premium-toggle-label">{label}</div>
         {description && <div className="premium-toggle-desc">{description}</div>}
       </div>
-    </label>
+    </div>
   );
 }
 
@@ -233,13 +231,13 @@ function Settings({
   setTtsSettings,
   showAlert = async ({ message }) => window.alert(message),
   showConfirm = async ({ message }) => window.confirm(message),
-  health,
-  cleanupItems,
-  isReadinessBusy,
-  refreshReadiness,
-  copyDiagnostics,
-  cleanupSafeItems,
-  diagnosticsCopied,
+  _health,
+  _cleanupItems,
+  _isReadinessBusy,
+  _refreshReadiness,
+  _copyDiagnostics,
+  _cleanupSafeItems,
+  _diagnosticsCopied,
   theme,
   setTheme,
   fontSize,
@@ -247,8 +245,8 @@ function Settings({
 }) {
   const [llmStatus, setLlmStatus] = useState({ ready: false, settings: {} });
   const [llmBackends, setLlmBackends] = useState({ available: [], candidates: [] });
-  const [llmStats, setLlmStats] = useState({ benchmarks: [] });
-  const [benchmarkBusy, setBenchmarkBusy] = useState(false);
+  const [_llmStats, setLlmStats] = useState({ benchmarks: [] });
+  const [_benchmarkBusy, setBenchmarkBusy] = useState(false);
   const [backendDownload, setBackendDownload] = useState({
     active: false,
     backendId: "",
@@ -321,6 +319,9 @@ function Settings({
   useEffect(() => {
     let cancelled = false;
     const fetchLlmStatus = async () => {
+      // Skip polling if page is not visible to reduce unnecessary network requests
+      if (document.hidden) return;
+
       try {
         const status = await getLlmStatus();
         if (!cancelled) setLlmStatus(status);
@@ -343,7 +344,7 @@ function Settings({
 
   const isSD15OrCustom = activeModel ? isSD15OrCustomModel(activeModel) : false;
   const isOpenVinoNpu = constraints.backendType === "openvino-npu";
-  const supportsThinking = Boolean(llmStatus.ready && llmStatus.settings?.supportsThinking);
+  const _supportsThinking = Boolean(llmStatus.ready && llmStatus.settings?.supportsThinking);
   const availableBackends = backendOptions?.options?.length
     ? backendOptions.options
     : [{ id: "cpu", label: "CPU", available: true }];
@@ -499,7 +500,7 @@ function Settings({
     preferredBackend: settings?.preferredBackend,
   });
 
-  const handleBenchmarkTextBackend = async () => {
+  const _handleBenchmarkTextBackend = async () => {
     const model = llmStatus.settings?.model;
     if (!model) {
       showAlert({ title: "Текстовая модель не загружена", message: "Загрузите GGUF текстовую модель перед запуском бенчмарка.", danger: true });
@@ -530,7 +531,7 @@ function Settings({
     }
   };
 
-  const handleThinkingToggle = async (enabled) => {
+  const _handleThinkingToggle = async (enabled) => {
     const nextSettings = { ...pendingTextSettings, enableThinking: enabled };
 
     let status = null;
@@ -752,8 +753,8 @@ function Settings({
 
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
                 <div className="m3-text-field">
-                  <label className="m3-text-field-label">Ширина</label>
-                  <input
+                  <label className="m3-text-field-label" htmlFor="settings-width">Ширина</label>
+                  <input id="settings-width" name="settings-758"
                     type="number"
                     className="m3-input"
                     value={constraints.width}
@@ -764,8 +765,8 @@ function Settings({
                   />
                 </div>
                 <div className="m3-text-field">
-                  <label className="m3-text-field-label">Высота</label>
-                  <input
+                  <label className="m3-text-field-label" htmlFor="settings-height">Высота</label>
+                  <input id="settings-height" name="settings-770"
                     type="number"
                     className="m3-input"
                     value={constraints.height}
@@ -791,7 +792,7 @@ function Settings({
                   <span className="m3-slider-label">Шаги детализации</span>
                   <span className="settings-value-badge">{constraints.steps}</span>
                 </div>
-                <input
+                <input name="settings-796"
                   type="range"
                   className="m3-slider"
                   value={constraints.steps}
@@ -808,9 +809,9 @@ function Settings({
               </div>
 
               <div className="m3-text-field">
-                <label className="m3-text-field-label">Параметр Random Seed</label>
+                <label className="m3-text-field-label" htmlFor="settings-image-seed">Параметр Random Seed</label>
                 <div style={{ display: "flex", gap: "8px" }}>
-                  <input
+                  <input id="settings-image-seed" name="settings-815"
                     type="number"
                     className="m3-input"
                     value={constraints.seed}
@@ -980,8 +981,8 @@ function Settings({
             </div>
             <div className="m3-field-group">
               <div className="m3-text-field">
-                <label className="m3-text-field-label">Системный промпт</label>
-                <textarea
+                <label className="m3-text-field-label" htmlFor="settings-system-prompt">Системный промпт</label>
+                <textarea id="settings-system-prompt" name="settings-986"
                    className="m3-input"
                    value={pendingTextSettings.systemPrompt || ""}
                    onChange={(e) => updateTextSetting("systemPrompt", e.target.value)}
@@ -999,7 +1000,7 @@ function Settings({
                   <span className="m3-slider-label">Размер контекста</span>
                   <span className="settings-value-badge">{pendingTextSettings.contextSize || 0}</span>
                 </div>
-                <input
+                <input name="settings-1004"
                   type="range"
                   className="m3-slider"
                   value={pendingTextSettings.contextSize || 0}
@@ -1028,7 +1029,7 @@ function Settings({
                   <span className="m3-slider-label">Температура</span>
                   <span className="settings-value-badge">{pendingTextSettings.temperature}</span>
                 </div>
-                <input
+                <input name="settings-1033"
                   type="range"
                   className="m3-slider"
                   value={pendingTextSettings.temperature}
@@ -1067,7 +1068,7 @@ function Settings({
                 </div>
                 {(pendingTextSettings.responseTokenMode || "auto") === "manual" ? (
                   <>
-                    <input
+                    <input name="settings-1072"
                       type="range"
                       className="m3-slider"
                       value={pendingTextSettings.maxTokens || 1024}
@@ -1089,8 +1090,8 @@ function Settings({
               </div>
 
               <div className="m3-text-field">
-                <label className="m3-text-field-label">Сид</label>
-                <input
+                <label className="m3-text-field-label" htmlFor="settings-text-seed">Сид</label>
+                <input id="settings-text-seed" name="settings-1095"
                   type="number"
                   className="m3-input"
                   value={pendingTextSettings.seed}
@@ -1165,7 +1166,7 @@ function Settings({
                   <span className="m3-slider-label">Потоки CPU</span>
                   <span className="settings-value-badge">{pendingTextSettings.threads || 4}</span>
                 </div>
-                <input
+                <input name="settings-1170"
                   type="range"
                   className="m3-slider"
                   value={pendingTextSettings.threads || 4}
@@ -1181,7 +1182,7 @@ function Settings({
                   <span className="m3-slider-label">Слои GPU</span>
                   <span className="settings-value-badge">{pendingTextSettings.gpuLayers === -1 ? "Все" : pendingTextSettings.gpuLayers}</span>
                 </div>
-                <input
+                <input name="settings-1186"
                   type="range"
                   className="m3-slider"
                   value={pendingTextSettings.gpuLayers === -1 ? 50 : pendingTextSettings.gpuLayers}
@@ -1203,7 +1204,7 @@ function Settings({
                   <span className="m3-slider-label">Размер батча</span>
                   <span className="settings-value-badge">{pendingTextSettings.batchSize || 512}</span>
                 </div>
-                <input
+                <input name="settings-1208"
                   type="range"
                   className="m3-slider"
                   value={pendingTextSettings.batchSize || 512}
@@ -1332,8 +1333,8 @@ function Settings({
                   </div>
                   <div className="m3-field-group">
                     <div className="m3-text-field">
-                      <label className="m3-text-field-label">Бэкенд по умолчанию</label>
-                      <select
+                      <label className="m3-text-field-label" htmlFor="settings-speech-backend">Бэкенд по умолчанию</label>
+                      <select id="settings-speech-backend" name="settings-1338"
                         className="m3-input"
                         value={speechSettings.backendPreference || "auto"}
                         onChange={(e) => updateSpeechSetting("backendPreference", e.target.value)}
@@ -1349,8 +1350,8 @@ function Settings({
                     </div>
 
                     <div className="m3-text-field">
-                      <label className="m3-text-field-label">Язык по умолчанию</label>
-                      <select 
+                      <label className="m3-text-field-label" htmlFor="settings-speech-language">Язык по умолчанию</label>
+                      <select id="settings-speech-language" name="settings-1355" 
                         className="m3-input" 
                         value={speechSettings.language || "auto"} 
                         onChange={(e) => updateSpeechSetting("language", e.target.value)}
@@ -1371,7 +1372,7 @@ function Settings({
                         <span className="m3-slider-label">Потоки CPU</span>
                         <span className="settings-value-badge">{speechSettings.threads || 4}</span>
                       </div>
-                      <input
+                      <input name="settings-1376"
                         type="range"
                         className="m3-slider"
                         value={speechSettings.threads || 4}
@@ -1448,8 +1449,8 @@ function Settings({
                   </div>
                   <div className="m3-field-group">
                     <div className="m3-text-field">
-                      <label className="m3-text-field-label">Голос по умолчанию</label>
-                      <select
+                      <label className="m3-text-field-label" htmlFor="settings-tts-voice">Голос по умолчанию</label>
+                      <select id="settings-tts-voice" name="settings-1454"
                         className="m3-input"
                         value={ttsSettings?.voice || "af_heart"}
                         onChange={(e) => updateTtsSetting("voice", e.target.value)}
@@ -1479,7 +1480,7 @@ function Settings({
                       <span className="m3-slider-label">Скорость</span>
                       <span className="settings-value-badge">{(ttsSettings?.speed || 1).toFixed(2)}x</span>
                     </div>
-                    <input
+                    <input name="settings-1484"
                       type="range"
                       className="m3-slider"
                       value={ttsSettings?.speed || 1}
@@ -1600,7 +1601,7 @@ function Settings({
                 <span className="m3-slider-label">Размер шрифта</span>
                 <span className="settings-value-badge">{fontSize || 16}px</span>
               </div>
-              <input
+              <input name="settings-1605"
                 type="range"
                 className="m3-slider"
                 value={fontSize || 16}

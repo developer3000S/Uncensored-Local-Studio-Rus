@@ -1,0 +1,13 @@
+# Build context for the Studio image. Everything heavy (models, backends,
+# portable node) is bind-mounted at runtime, so it must NOT be sent to the
+# builder — studio/app/llm-models alone is 231 GB.
+app/
+.env
+.env.*
+*.log
+*.part
+*.tmp
+*.gguf
+*.safetensors
+*.ckpt
+*.onnx

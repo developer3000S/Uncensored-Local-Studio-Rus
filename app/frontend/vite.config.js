@@ -7,6 +7,11 @@ const host = process.env.TAURI_DEV_HOST;
 export default defineConfig(async () => ({
   plugins: [react()],
 
+  // Relative so the bundle resolves against whatever path serves index.html.
+  // Embedded under /studio on the Open WebUI origin, absolute "/assets/..."
+  // would hit Open WebUI's own frontend build instead of the studio's.
+  base: "./",
+
   build: {
     // Output to app/dist/ so serve.cjs can find it
     outDir: "../dist",

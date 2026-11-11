@@ -51,6 +51,25 @@ function App() {
   // Navigation
   const [activeTab, setActiveTab] = useState("generator");
 
+  // Deep-linking from the Open WebUI sidebar: the embedded page under /studio
+  // posts { type: "studio:tab", tab } so a click on a sidebar item switches the
+  // tab shown in the iframe. Same-origin only — in browser mode the iframe is
+  // served from the Open WebUI origin.
+  useEffect(() => {
+    const STUDIO_TABS = ["generator", "chat", "agents", "speech", "tts", "models", "settings"];
+    const onMessage = (event) => {
+      if (event.origin !== window.location.origin) return;
+      const { type, tab } = event.data ?? {};
+      if (type !== "studio:tab") return;
+      if (STUDIO_TABS.includes(tab)) setActiveTab(tab);
+    };
+    window.addEventListener("message", onMessage);
+    // Announce readiness so the embedding page re-sends the pending tab
+    // instead of racing with React mount.
+    window.parent?.postMessage({ type: "studio:ready" }, window.location.origin);
+    return () => window.removeEventListener("message", onMessage);
+  }, []);
+
   // Prompts
   const [prompt, setPrompt] = useState("");
   const [negativePrompt, setNegativePrompt] = useState("");
@@ -591,6 +610,9 @@ function App() {
   // Poll system telemetry usage statistics on interval
   useEffect(() => {
     async function updateTelemetry() {
+      // Skip polling if page is not visible to reduce unnecessary network requests
+      if (document.hidden) return;
+
       try {
         const stats = await getTelemetry();
         setTelemetry((prev) => (
