@@ -21,14 +21,12 @@ const FALLBACK_VOICES = [
   { id: "am_michael", name: "Michael", language: "en-us", gender: "Male" },
   { id: "bf_emma", name: "Emma", language: "en-gb", gender: "Female" },
   { id: "bm_george", name: "George", language: "en-gb", gender: "Male" },
-  { id: "rf_anna", name: "Анна", language: "ru-ru", gender: "Female" },
-  { id: "rf_elena", name: "Елена", language: "ru-ru", gender: "Female" },
-  { id: "rf_maria", name: "Мария", language: "ru-ru", gender: "Female" },
-  { id: "rf_olga", name: "Ольга", language: "ru-ru", gender: "Female" },
-  { id: "rm_alexei", name: "Алексей", language: "ru-ru", gender: "Male" },
-  { id: "rm_dmitry", name: "Дмитрий", language: "ru-ru", gender: "Male" },
-  { id: "rm_ivan", name: "Иван", language: "ru-ru", gender: "Male" },
-  { id: "rm_sergei", name: "Сергей", language: "ru-ru", gender: "Male" },
+  { id: "ru_anna", name: "Анна", language: "ru-ru", gender: "Female", engine: "espeak-ng" },
+  { id: "ru_elena", name: "Елена", language: "ru-ru", gender: "Female", engine: "espeak-ng" },
+  { id: "ru_olga", name: "Ольга", language: "ru-ru", gender: "Female", engine: "espeak-ng" },
+  { id: "ru_alexei", name: "Алексей", language: "ru-ru", gender: "Male", engine: "espeak-ng" },
+  { id: "ru_dmitry", name: "Дмитрий", language: "ru-ru", gender: "Male", engine: "espeak-ng" },
+  { id: "ru_ivan", name: "Иван", language: "ru-ru", gender: "Male", engine: "espeak-ng" },
 ];
 
 function downloadUrl(url, filename) {
@@ -50,15 +48,20 @@ export default function TextToSpeech({
   const [status, setStatus] = useState({ ready: false, running: false, runtimeInstalled: false, settings: {}, voices: [] });
   const [models, setModels] = useState([]);
   const [selectedModel, setSelectedModel] = useState("");
-  const [text, setText] = useState("Hello from Local AI Studio text to speech.");
+  const [text, setText] = useState("Здравствуйте из Local AI Studio: преобразование текста в речь.");
   const [isLoadingModel, setIsLoadingModel] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [output, setOutput] = useState(null);
   const abortRef = useRef(null);
 
   const installedModels = useMemo(() => models.filter((model) => model.installed), [models]);
-  const voices = status.voices?.length ? status.voices : FALLBACK_VOICES;
-  const selectedVoice = ttsSettings?.voice || "af_heart";
+  const serverVoices = status.voices?.length ? status.voices : [];
+  const voices = [
+    ...serverVoices,
+    ...FALLBACK_VOICES.filter((v) => !serverVoices.some((sv) => sv.id === v.id)),
+  ];
+  const voiceIds = voices.map((v) => v.id);
+  const selectedVoice = voiceIds.includes(ttsSettings?.voice) ? ttsSettings.voice : "af_heart";
   const speed = ttsSettings?.speed || 1;
 
   const updateTtsSetting = (key, value) => {

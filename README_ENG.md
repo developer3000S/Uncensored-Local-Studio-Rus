@@ -50,7 +50,9 @@ It unifies four major local AI capabilities into one high-performance desktop in
 1. **🎨 Image Generation (Stable Diffusion):** Generate and edit high-quality images offline using `.safetensors`, `.gguf`, or `.ckpt` model weights.
 2. **💬 Text Chat (LLMs):** Converse privately with open-source language models (GGUF format) powered by official, high-performance `llama.cpp` backends.
 3. **🎙️ Speech-to-Text (Whisper):** Transcribe voice recordings and speech to text in real-time with an integrated `whisper.cpp` engine.
-4. **🗣️ Text-to-Speech (Kokoro TTS):** Convert text outputs into highly natural, lifelike vocal audio offline using the `Kokoro-82M` ONNX model.
+4. **🗣️ Text-to-Speech (TTS):** Convert text outputs into natural voice. Two engines are supported:
+   - **Kokoro‑82M ONNX** – English voices (Heart, Bella, Michael, Emma, George, etc.).
+   - **Qwen3‑TTS 1.7B ONNX** – **Russian voices** with zero‑shot voice cloning: Anna, Elena, Olga (female), Alexei, Dmitry, Ivan (male).
 5. **🤖 Customized Agents & RAG:** Create customized local AI agents with unique system prompts, personal or shared knowledge bases (RAG) based on your documents (PDF, TXT, MD), and support for sequential background task execution.
 
 ---
@@ -73,7 +75,25 @@ To avoid exhausting system RAM or VRAM, text and image engines are mutually excl
 *   **Image Generation Workspace:** Uses a dedicated `stable-diffusion.cpp` backend node. Model weights are stored in `app/models/`.
 *   **Text Chat Workspace:** Uses a portable `llama.cpp` server backend. Model weights (.gguf) are stored in `app/llm-models/`. A small Qwen2.5 Coder starter model can be downloaded directly from the Text Chat panel.
 *   **Speech Worker (Whisper):** Runs a localized `whisper-cli` process to convert your vocal input to text.
-*   **Audio Output (Kokoro TTS):** Utilizes `kokoro-js` locally on the server side to read responses in natural voices.
+*   **Audio Output (Kokoro TTS):** Utilizes `kokoro-js` locally on the server side to read responses in natural English voices.
+*   **Audio Output (Qwen3‑TTS):** Python worker `scripts/workers/qwen3-tts-worker.py` based on `Qwen3-TTS-12Hz-1.7B-Base-ONNX` for Russian text‑to‑speech with voice cloning.
+
+## 🇷🇺 Russian Language Support
+
+### Text‑to‑Speech (TTS)
+Russian speech synthesis uses the **Qwen3‑TTS 1.7B** model with zero‑shot voice cloning. Available voices:
+* Female: **Anna** (`ru_anna`), **Elena** (`ru_elena`), **Olga** (`ru_olga`)
+* Male: **Alexei** (`ru_alexei`), **Dmitry** (`ru_dmitry`), **Ivan** (`ru_ivan`)
+
+Model files and reference audio are in `app/tts-models/Qwen3-TTS-12Hz-1.7B-Base-ONNX/`. English voices continue to work via `kokoro-js`.
+
+### Speech‑to‑Text (Whisper)
+For Russian speech recognition, use multilingual Whisper models:
+* **Whisper Medium Multilingual** (`ggml-medium.bin`, 1.5 GB) — recommended for Russian
+* **Whisper Large‑v3 Multilingual** (`ggml-large-v3.bin`, 3.0 GB)
+
+In the Speech‑to‑Text UI, select language **Russian** and one of the multilingual models above. English‑only models (`.en`) do not support Russian.
+
 
 ---
 

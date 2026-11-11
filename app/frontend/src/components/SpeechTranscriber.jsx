@@ -19,6 +19,7 @@ import {
 
 const LANGUAGE_OPTIONS = [
   { value: "auto", label: "Автоопределение" },
+  { value: "ru", label: "Русский" },
   { value: "en", label: "Английский" },
   { value: "es", label: "Испанский" },
   { value: "fr", label: "Французский" },

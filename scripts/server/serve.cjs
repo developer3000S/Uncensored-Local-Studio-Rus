@@ -204,14 +204,16 @@ const SPEECH_BACKEND_PATHS = {
 const SPEECH_MODEL_CATALOG = [
   { id: "tiny.en", name: "Whisper Tiny English", filename: "ggml-tiny.en.bin", size: "75 MB", language: "English", recommended: false },
   { id: "tiny.en-q5_1", name: "Whisper Tiny English Q5", filename: "ggml-tiny.en-q5_1.bin", size: "31 MB", language: "English", recommended: false },
-  { id: "base.en", name: "Whisper Base English", filename: "ggml-base.en.bin", size: "142 MB", language: "English", recommended: true },
-  { id: "base.en-q5_1", name: "Whisper Base English Q5", filename: "ggml-base.en-q5_1.bin", size: "57 MB", language: "English", recommended: true },
+  { id: "base.en", name: "Whisper Base English", filename: "ggml-base.en.bin", size: "142 MB", language: "English", recommended: false },
+  { id: "base.en-q5_1", name: "Whisper Base English Q5", filename: "ggml-base.en-q5_1.bin", size: "57 MB", language: "English", recommended: false },
   { id: "small.en", name: "Whisper Small English", filename: "ggml-small.en.bin", size: "466 MB", language: "English", recommended: false },
   { id: "small.en-q5_1", name: "Whisper Small English Q5", filename: "ggml-small.en-q5_1.bin", size: "181 MB", language: "English", recommended: false },
   { id: "tiny", name: "Whisper Tiny Multilingual", filename: "ggml-tiny.bin", size: "75 MB", language: "Multilingual", recommended: false },
   { id: "base", name: "Whisper Base Multilingual", filename: "ggml-base.bin", size: "142 MB", language: "Multilingual", recommended: false },
   { id: "base-q5_1", name: "Whisper Base Multilingual Q5", filename: "ggml-base-q5_1.bin", size: "57 MB", language: "Multilingual", recommended: false },
   { id: "small", name: "Whisper Small Multilingual", filename: "ggml-small.bin", size: "466 MB", language: "Multilingual", recommended: false },
+  { id: "medium", name: "Whisper Medium Multilingual (Русский)", filename: "ggml-medium.bin", size: "1.5 GB", language: "Multilingual", recommended: true },
+  { id: "large-v3", name: "Whisper Large-v3 Multilingual (Русский)", filename: "ggml-large-v3.bin", size: "3.0 GB", language: "Multilingual", recommended: false },
 ];
 const TTS_MODEL_CATALOG = [
   {
@@ -236,6 +238,12 @@ const TTS_MODEL_CATALOG = [
   },
 ];
 const TTS_VOICES = [
+  { id: "ru_anna", name: "Анна", language: "ru-ru", gender: "Female", engine: "qwen3-tts", recommended: false },
+  { id: "ru_elena", name: "Елена", language: "ru-ru", gender: "Female", engine: "qwen3-tts", recommended: false },
+  { id: "ru_olga", name: "Ольга", language: "ru-ru", gender: "Female", engine: "qwen3-tts", recommended: false },
+  { id: "ru_alexei", name: "Алексей", language: "ru-ru", gender: "Male", engine: "qwen3-tts", recommended: false },
+  { id: "ru_dmitry", name: "Дмитрий", language: "ru-ru", gender: "Male", engine: "qwen3-tts", recommended: false },
+  { id: "ru_ivan", name: "Иван", language: "ru-ru", gender: "Male", engine: "qwen3-tts", recommended: false },
   { id: "af_heart", name: "Heart", language: "en-us", gender: "Female", recommended: true },
   { id: "af_bella", name: "Bella", language: "en-us", gender: "Female", recommended: false },
   { id: "af_nicole", name: "Nicole", language: "en-us", gender: "Female", recommended: false },
@@ -2426,21 +2434,25 @@ function runExclusiveTtsOperation(operation) {
 }
 
 async function startTts(settings = {}) {
-  const runtime = getTtsRuntimeStatus();
-  if (!runtime.installed) {
-    throw new Error("Kokoro TTS runtime is not installed. Run scripts/setup/setup-tts for this platform.");
+  const voice = String(settings.voice || ttsSettings.voice || "af_heart");
+  const voiceInfo = TTS_VOICES.find((item) => item.id === voice) || { id: voice, name: voice };
+  if (voiceInfo.engine !== "espeak-ng") {
+    const runtime = getTtsRuntimeStatus();
+    if (!runtime.installed) {
+      throw new Error("Kokoro TTS runtime is not installed. Run scripts/setup/setup-tts for this platform.");
+    }
+    const model = resolveTtsModel(settings.model || ttsSettings.model);
   }
-  const model = resolveTtsModel(settings.model || ttsSettings.model);
   PORT_TTS = PREFERRED_TTS_PORT;
   ttsError = null;
   ttsReady = true;
   ttsSettings = {
     ...ttsSettings,
-    model: model.filename,
-    voice: settings.voice || ttsSettings.voice || "af_heart",
+    model: settings.model || ttsSettings.model,
+    voice,
     speed: Math.max(0.5, Math.min(2, Number(settings.speed) || ttsSettings.speed || 1)),
-    dtype: model.dtype || settings.dtype || ttsSettings.dtype || "q8",
-    backendMode: runtime.backendMode,
+    dtype: voiceInfo.engine === "espeak-ng" ? "espeak" : (ttsSettings.dtype || "q8"),
+    backendMode: voiceInfo.engine === "espeak-ng" ? "espeak-ng" : "Kokoro ONNX",
   };
 }
 
@@ -2597,14 +2609,22 @@ function synthesizeTts(text, options = {}) {
       reject(new Error("TTS text is too long. Limit is 5000 characters for V1."));
       return;
     }
+    const voice = String(options.voice || ttsSettings.voice || "af_heart");
+    const voiceInfo = TTS_VOICES.find((item) => item.id === voice) || TTS_VOICES.find((item) => item.id === "af_heart") || { id: voice, name: voice, engine: "kokoro" };
+    if (voiceInfo.engine === "qwen3-tts") {
+      resolve(synthesizeTtsQwen3(cleanedText, options));
+      return;
+    }
+    if (voiceInfo.engine === "espeak-ng") {
+      resolve(synthesizeTtsEspeak(cleanedText, options));
+      return;
+    }
     const runtime = getTtsRuntimeStatus();
     if (!runtime.installed) {
       reject(new Error("Kokoro TTS runtime is not installed."));
       return;
     }
     const model = resolveTtsModel(options.model || ttsSettings.model);
-    const voice = String(options.voice || ttsSettings.voice || "af_heart");
-    const voiceInfo = TTS_VOICES.find((item) => item.id === voice) || { id: voice, name: voice };
     const speed = Math.max(0.5, Math.min(2, Number(options.speed) || ttsSettings.speed || 1));
     const stamp = new Date().toISOString().replace(/[:.]/g, "-");
     const tempWav = path.join(TTS_OUTPUTS, `.tts-${stamp}.wav`);
@@ -2680,6 +2700,158 @@ function synthesizeTts(text, options = {}) {
         resolve(saved);
       } catch (err) {
         try { fs.unlinkSync(tempWav); } catch (_) {}
+        ttsError = err.message || String(err);
+        reject(err);
+      }
+    });
+    proc.stdin.end(JSON.stringify(payload));
+  });
+}
+
+function synthesizeTtsEspeak(text, options = {}) {
+  return new Promise((resolve, reject) => {
+    const voice = String(options.voice || ttsSettings.voice || "ru");
+    const speed = Math.max(0.5, Math.min(2, Number(options.speed) || ttsSettings.speed || 1));
+    const wpm = Math.round(120 + (speed - 0.5) * 300);
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const wavPath = path.join(TTS_OUTPUTS, `.tts-espeak-${stamp}.wav`);
+    const voiceInfo = TTS_VOICES.find((item) => item.id === voice) || { id: voice, name: voice };
+
+    ttsGenerationState = {
+      active: true,
+      phase: "Generating speech...",
+      progress: -1,
+      model: "espeak-ng",
+      voice,
+      output: "",
+    };
+
+    const startedAt = Date.now();
+    const proc = spawn("espeak-ng", [
+      "-v", voice,
+      "-s", String(wpm),
+      "-w", wavPath,
+      text,
+    ], {
+      stdio: "pipe",
+    });
+    let stderr = "";
+    proc.stderr.on("data", (data) => { stderr += data.toString(); });
+    proc.on("error", (err) => {
+      ttsGenerationState = { active: false, phase: "Failed", progress: 0, model: "espeak-ng", voice, output: "" };
+      reject(err);
+    });
+    proc.on("exit", (code) => {
+      ttsGenerationState = { active: false, phase: code === 0 ? "Complete" : "Failed", progress: code === 0 ? 100 : 0, model: "espeak-ng", voice, output: "" };
+      if (code !== 0) {
+        const message = (stderr || `espeak-ng exited with code ${code}`).trim().slice(-1400);
+        ttsError = message;
+        reject(new Error(message));
+        return;
+      }
+      if (!fs.existsSync(wavPath)) {
+        const message = "espeak-ng did not produce a WAV file.";
+        ttsError = message;
+        reject(new Error(message));
+        return;
+      }
+      const saved = saveTtsOutput({
+        text,
+        model: "espeak-ng",
+        modelName: "espeak-ng",
+        voice,
+        voiceName: voiceInfo.name,
+        speed,
+        durationMs: Date.now() - startedAt,
+        sampleRate: 22050,
+        wavPath,
+        displayName: `${voiceInfo.name || voice} - ${text.slice(0, 40)}`,
+      });
+      ttsError = null;
+      resolve(saved);
+    });
+  });
+}
+
+function synthesizeTtsQwen3(text, options = {}) {
+  return new Promise((resolve, reject) => {
+    const voice = String(options.voice || ttsSettings.voice || "ru_anna");
+    const speed = Math.max(0.5, Math.min(2, Number(options.speed) || ttsSettings.speed || 1));
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const wavPath = path.join(TTS_OUTPUTS, `.tts-qwen3-${stamp}.wav`);
+    const voiceInfo = TTS_VOICES.find((item) => item.id === voice) || { id: voice, name: voice };
+
+    const femaleVoices = ["ru_anna", "ru_elena", "ru_olga"];
+    const referenceAudio = femaleVoices.includes(voice)
+      ? path.join(ROOT, "app", "tts-models", "Qwen3-TTS-12Hz-1.7B-Base-ONNX", "reference_female.wav")
+      : path.join(ROOT, "app", "tts-models", "Qwen3-TTS-12Hz-1.7B-Base-ONNX", "reference_male.wav");
+
+    const maxSeconds = Math.min(90, Math.max(15, Math.ceil(text.length / 10) + 5));
+
+    ttsGenerationState = {
+      active: true,
+      phase: "Generating speech (Qwen3-TTS)...",
+      progress: -1,
+      model: "qwen3-tts-1.7b",
+      voice,
+      output: "",
+    };
+
+    const startedAt = Date.now();
+    const payload = {
+      text,
+      output: wavPath,
+      language: "russian",
+      max_seconds: maxSeconds,
+      voice,
+      voiceName: voiceInfo.name,
+      reference_audio: referenceAudio,
+    };
+
+    const proc = spawn("python3", [path.join(ROOT, "scripts", "workers", "qwen3-tts-worker.py")], {
+      cwd: ROOT,
+      stdio: ["pipe", "pipe", "pipe"],
+      env: {
+        ...process.env,
+        QWEN3_TTS_MODEL_DIR: path.join(ROOT, "app", "tts-models", "Qwen3-TTS-12Hz-1.7B-Base-ONNX"),
+      },
+    });
+    let stdout = "";
+    let stderr = "";
+    proc.stdout.on("data", (data) => { stdout += data.toString(); });
+    proc.stderr.on("data", (data) => { stderr += data.toString(); });
+    proc.on("error", (err) => {
+      ttsGenerationState = { active: false, phase: "Failed", progress: 0, model: "qwen3-tts-1.7b", voice, output: "" };
+      reject(err);
+    });
+    proc.on("exit", (code) => {
+      ttsGenerationState = { active: false, phase: code === 0 ? "Complete" : "Failed", progress: code === 0 ? 100 : 0, model: "qwen3-tts-1.7b", voice, output: "" };
+      if (code !== 0) {
+        const message = (stderr || `Qwen3-TTS exited with code ${code}`).trim().slice(-1400);
+        ttsError = message;
+        reject(new Error(message));
+        return;
+      }
+      try {
+        const result = JSON.parse(stdout.trim() || "{}");
+        if (!result.output || !fs.existsSync(result.output)) {
+          throw new Error(result.error || "Qwen3-TTS did not produce a WAV file.");
+        }
+        const saved = saveTtsOutput({
+          text,
+          model: "qwen3-tts-1.7b",
+          modelName: result.modelName || "Qwen3-TTS 1.7B (Russian)",
+          voice,
+          voiceName: voiceInfo.name || result.voiceName || voice,
+          speed,
+          durationMs: result.durationMs || Date.now() - startedAt,
+          sampleRate: result.sampleRate || 24000,
+          wavPath: result.output,
+          displayName: `${voiceInfo.name || voice} - ${text.slice(0, 40)}`,
+        });
+        ttsError = null;
+        resolve(saved);
+      } catch (err) {
         ttsError = err.message || String(err);
         reject(err);
       }
