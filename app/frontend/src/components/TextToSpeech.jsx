@@ -21,6 +21,14 @@ const FALLBACK_VOICES = [
   { id: "am_michael", name: "Michael", language: "en-us", gender: "Male" },
   { id: "bf_emma", name: "Emma", language: "en-gb", gender: "Female" },
   { id: "bm_george", name: "George", language: "en-gb", gender: "Male" },
+  { id: "rf_anna", name: "Анна", language: "ru-ru", gender: "Female" },
+  { id: "rf_elena", name: "Елена", language: "ru-ru", gender: "Female" },
+  { id: "rf_maria", name: "Мария", language: "ru-ru", gender: "Female" },
+  { id: "rf_olga", name: "Ольга", language: "ru-ru", gender: "Female" },
+  { id: "rm_alexei", name: "Алексей", language: "ru-ru", gender: "Male" },
+  { id: "rm_dmitry", name: "Дмитрий", language: "ru-ru", gender: "Male" },
+  { id: "rm_ivan", name: "Иван", language: "ru-ru", gender: "Male" },
+  { id: "rm_sergei", name: "Сергей", language: "ru-ru", gender: "Male" },
 ];
 
 function downloadUrl(url, filename) {
