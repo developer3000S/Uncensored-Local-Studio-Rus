@@ -48,7 +48,7 @@ cat > node_modules/.bin/tauri << 'WRAPPER'
 require('../@tauri-apps/cli/tauri.js')
 WRAPPER
 chmod +x node_modules/.bin/tauri
-npm run build
+# npm run build
 cd ../..
 ./scripts/rebuild.sh 
 
